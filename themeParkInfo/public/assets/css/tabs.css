@@ -1,0 +1,92 @@
+/* =========================
+   PARK TABS
+========================= */
+.park-tabs {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.park-tab {
+  padding: 15px;
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-basis: 100%;
+}
+
+.park-tab:hover {
+  background: var(--hover);
+}
+
+.park-tab.active {
+  border: 1px solid var(--bg);
+  background: var(--bg);
+  color: #000;
+  border-bottom: none;
+}
+
+/* =========================
+   PARK CONTENT
+========================= */
+.park-content {
+  display: none;
+  padding: 24px 0 0;
+}
+
+.park-content.active {
+  display: block;
+}
+
+/* =========================
+   SUB TABS (Rides / Shows / Restaurants)
+========================= */
+.sub-tabs {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.sub-tab {
+  padding: 12px 14px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sub-tab:hover {
+  background: var(--hover);
+}
+
+.sub-tab.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+/* =========================
+   SECTION WRAPPER (TAB PANELS)
+========================= */
+.card-wrapper {
+  margin-bottom: 32px;
+  display: none;
+}
+
+.card-wrapper.active {
+  display: block;
+}
+
+.card-wrapper h2 {
+  margin: 8px 0 12px;
+  font-size: 20px;
+}
