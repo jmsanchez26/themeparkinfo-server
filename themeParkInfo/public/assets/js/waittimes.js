@@ -22,13 +22,23 @@ fetch(apiUrl)
     return res.json();
   })
   .then(response => {
-    if (!response.data) {
-      throw new Error("No data in response");
+
+    if (response.error) {
+      console.warn("API Error:", response.message);
+    }
+
+    if (response.warning) {
+      console.warn("⚠", response.message);
+    }
+
+    if (!response.data || !response.data.liveData) {
+      console.warn("No live data available");
+      return;
     }
 
     const data = response.data;
 
-      resetData();
+    resetData();
 
       data.liveData?.forEach(item => {
         let waitTime = item.queue?.STANDBY?.waitTime;

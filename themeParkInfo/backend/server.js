@@ -1,17 +1,16 @@
+/********************************
+ * Dependencies
+ ********************************/
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
 require("dotenv").config();
 
-const app = express();
-const PORT = 3000;
+// If using Node < 18, uncomment the next line:
+// const fetch = require("node-fetch");
 
-/********************************
- * Test Route
- ********************************/
-app.get("/test", (req, res) => {
-  res.send("SERVER IS WORKING");
-});
+const app = express();
+const PORT = process.env.PORT || 3000;
 
 /********************************
  * Middleware
@@ -20,7 +19,7 @@ app.use(cors());
 app.use(express.json());
 
 /********************************
- * External API URLs
+ * External API URLs (from .env)
  ********************************/
 const API_URLS = {
   disneyland: process.env.DISNEYLAND_API,
@@ -28,7 +27,7 @@ const API_URLS = {
   wdw: process.env.WDW_API
 };
 
-// Safety check for missing env variables
+// Warn if any environment variable is missing
 for (const park in API_URLS) {
   if (!API_URLS[park]) {
     console.warn(`⚠ WARNING: Missing API URL for ${park}`);
@@ -36,7 +35,7 @@ for (const park in API_URLS) {
 }
 
 /********************************
- * Cache Object
+ * In-Memory Cache
  ********************************/
 let cache = {
   disneyland: { data: null, lastUpdated: null },
@@ -45,7 +44,7 @@ let cache = {
 };
 
 /********************************
- * Fetch & Cache All Parks
+ * Fetch & Cache Park Data
  ********************************/
 async function updateCache() {
   console.log("🔄 Updating park caches...");
@@ -64,47 +63,72 @@ async function updateCache() {
 
       cache[park].data = data;
       cache[park].lastUpdated = new Date();
+      cache[park].error = null;
 
       console.log(`✅ ${park} updated at ${cache[park].lastUpdated}`);
     } catch (err) {
       console.error(`❌ Error updating ${park}:`, err.message);
+
+      // Keep old data, just mark error
+      cache[park].error = err.message;
     }
   }
 }
 
-// Initial fetch
+// Initial fetch on startup
 updateCache();
 
 // Refresh every 30 seconds
 setInterval(updateCache, 30000);
 
 /********************************
- * API Route (MUST come before static)
+ * API Route
  ********************************/
 app.get("/api/:park", (req, res) => {
-  const park = req.params.park;
+  const park = req.params.park.toLowerCase();
 
   console.log(`📡 API request for: ${park}`);
 
   if (!cache[park]) {
-    return res.status(404).json({ message: "Park not found" });
+    return res.status(404).json({
+      error: true,
+      message: "Park not found"
+    });
   }
 
+  // If no data has EVER loaded
   if (!cache[park].data) {
-    return res.status(503).json({ message: "Data not ready yet" });
+    return res.status(503).json({
+      error: true,
+      message: "Live data unavailable",
+      data: { liveData: [] }
+    });
   }
 
+  // If we have data but last fetch failed
+  if (cache[park].error) {
+    return res.json({
+      warning: true,
+      message: "Using cached data (API temporarily unavailable)",
+      lastUpdated: cache[park].lastUpdated,
+      data: cache[park].data
+    });
+  }
+
+  // Normal case
   res.json({
     lastUpdated: cache[park].lastUpdated,
     data: cache[park].data
   });
 });
+
 /********************************
  * Test Route
  ********************************/
 app.get("/test", (req, res) => {
   res.send("SERVER IS WORKING");
 });
+
 /********************************
  * Serve Frontend (public folder)
  ********************************/

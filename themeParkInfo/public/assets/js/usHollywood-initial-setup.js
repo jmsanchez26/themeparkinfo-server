@@ -16,7 +16,6 @@ const PARK_IDS = {
  * API URL
  *************************/
 const apiUrl = "/api/hollywood";
-v
 /*************************
  * RENDERING
  *************************/
