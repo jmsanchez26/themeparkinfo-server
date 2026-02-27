@@ -6,7 +6,7 @@ const cors = require("cors");
 const path = require("path");
 require("dotenv").config();
 
-// If using Node < 18, uncomment the next line:
+// If using Node < 18, uncomment this:
 // const fetch = require("node-fetch");
 
 const app = express();
@@ -24,7 +24,8 @@ app.use(express.json());
 const API_URLS = {
   disneyland: process.env.DISNEYLAND_API,
   hollywood: process.env.HOLLYWOOD_API,
-  wdw: process.env.WDW_API
+  wdw: process.env.WDW_API,
+  usorlando: process.env.USORLANDO_API
 };
 
 // Warn if any environment variable is missing
@@ -37,11 +38,15 @@ for (const park in API_URLS) {
 /********************************
  * In-Memory Cache
  ********************************/
-let cache = {
-  disneyland: { data: null, lastUpdated: null },
-  hollywood: { data: null, lastUpdated: null },
-  wdw: { data: null, lastUpdated: null }
-};
+let cache = {};
+
+Object.keys(API_URLS).forEach(park => {
+  cache[park] = {
+    data: null,
+    lastUpdated: null,
+    error: null
+  };
+});
 
 /********************************
  * Fetch & Cache Park Data
@@ -69,13 +74,13 @@ async function updateCache() {
     } catch (err) {
       console.error(`❌ Error updating ${park}:`, err.message);
 
-      // Keep old data, just mark error
+      // Keep old cached data but mark error
       cache[park].error = err.message;
     }
   }
 }
 
-// Initial fetch on startup
+// Initial fetch
 updateCache();
 
 // Refresh every 30 seconds
@@ -96,7 +101,7 @@ app.get("/api/:park", (req, res) => {
     });
   }
 
-  // If no data has EVER loaded
+  // No data ever loaded
   if (!cache[park].data) {
     return res.status(503).json({
       error: true,
@@ -105,7 +110,7 @@ app.get("/api/:park", (req, res) => {
     });
   }
 
-  // If we have data but last fetch failed
+  // API temporarily failing but we have cache
   if (cache[park].error) {
     return res.json({
       warning: true,
@@ -115,7 +120,7 @@ app.get("/api/:park", (req, res) => {
     });
   }
 
-  // Normal case
+  // Normal success
   res.json({
     lastUpdated: cache[park].lastUpdated,
     data: cache[park].data
@@ -123,20 +128,26 @@ app.get("/api/:park", (req, res) => {
 });
 
 /********************************
- * Test Route
+ * Health Check Route
  ********************************/
 app.get("/test", (req, res) => {
   res.send("SERVER IS WORKING");
 });
 
 /********************************
- * Serve Frontend (public folder)
+ * Serve Frontend (IMPORTANT FIX)
  ********************************/
+
+// Serve static files from public folder
 app.use(express.static(path.join(__dirname, "../public")));
 
+// Fallback route for SPA / PWA
+app.use((req, res) => {
+  res.sendFile(path.join(__dirname, "../public/index.html"));
+});
 /********************************
  * Start Server
  ********************************/
 app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://127.0.0.1:${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
