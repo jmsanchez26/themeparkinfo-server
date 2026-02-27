@@ -1,0 +1,135 @@
+:root {
+  --bg: #f7f9fc;
+  --primary: #3b82f6;
+  --card: #ffffff;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --radius: 16px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Header */
+.app-header {
+  position: sticky;
+  top: 0;
+  background: var(--card);
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  z-index: 10;
+}
+
+.app-header h1 {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.park-status {
+  font-size: 0.85rem;
+}
+
+.park-status.open {
+  color: green;
+}
+
+/* Quick Actions */
+.quick-actions {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  overflow-x: auto;
+}
+
+.quick-actions button {
+  flex: 0 0 auto;
+  border: none;
+  background: var(--primary);
+  color: white;
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 0.9rem;
+}
+
+/* Featured */
+.featured {
+  padding: 0 16px 16px;
+}
+
+.featured-card {
+  background: linear-gradient(135deg, #6366f1, #3b82f6);
+  color: white;
+  padding: 16px;
+  border-radius: var(--radius);
+}
+
+.featured-card .tag {
+  font-size: 0.75rem;
+  opacity: 0.9;
+}
+
+/* Attractions */
+.attractions {
+  padding: 0 16px 80px;
+}
+
+.attraction-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--card);
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+}
+
+.attraction-card h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.attraction-card p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.wait {
+  font-weight: 600;
+}
+
+.wait.low {
+  color: green;
+}
+
+.wait.high {
+  color: #dc2626;
+}
+
+/* Bottom Nav */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-around;
+  background: var(--card);
+  padding: 10px 0;
+  box-shadow: 0 -2px 8px rgba(0,0,0,0.1);
+}
+
+.bottom-nav button {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+}
