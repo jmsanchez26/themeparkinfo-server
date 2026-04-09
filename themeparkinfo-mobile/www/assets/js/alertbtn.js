@@ -9,6 +9,7 @@ const isNativeApp =
   window.Capacitor.isNativePlatform();
 
 const pushNotifications = window.Capacitor?.Plugins?.PushNotifications;
+const localNotifications = window.Capacitor?.Plugins?.LocalNotifications;
 
 const pushRegistrationState = {
   token: null,
@@ -47,6 +48,31 @@ async function attachPushListeners() {
 
   await pushNotifications.addListener("registrationError", error => {
     console.error("Push registration failed:", error);
+  });
+
+  await pushNotifications.addListener("pushNotificationReceived", async notification => {
+    if (!localNotifications) return;
+
+    try {
+      const permission = await localNotifications.requestPermissions();
+      if (permission.display !== "granted") return;
+
+      const title = notification.title || "ThemeParkInfo alert";
+      const body = notification.body || "A wait time alert was triggered.";
+
+      await localNotifications.schedule({
+        notifications: [
+          {
+            id: Date.now(),
+            title,
+            body,
+            schedule: { at: new Date(Date.now() + 250) }
+          }
+        ]
+      });
+    } catch (error) {
+      console.error("Foreground notification display failed:", error);
+    }
   });
 
   pushRegistrationState.listenersAttached = true;
