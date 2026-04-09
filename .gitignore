@@ -1,0 +1,12 @@
+node_modules/
+**/node_modules/
+.idea/
+**/.idea/
+.gradle/
+**/.gradle/
+build/
+**/build/
+local.properties
+**/local.properties
+*.iml
+themeparkinfo-mobile/android/app/google-services.json

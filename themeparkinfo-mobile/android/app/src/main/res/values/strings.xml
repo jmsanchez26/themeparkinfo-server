@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ThemeParkInfo</string>
+    <string name="title_activity_main">ThemeParkInfo</string>
+    <string name="package_name">com.juanm.themeparkinfo</string>
+    <string name="custom_url_scheme">com.juanm.themeparkinfo</string>
+</resources>
