@@ -10,6 +10,7 @@ const isNativeApp =
 
 const pushNotifications = window.Capacitor?.Plugins?.PushNotifications;
 const localNotifications = window.Capacitor?.Plugins?.LocalNotifications;
+const FOREGROUND_ALERT_CHANNEL_ID = "foreground-wait-alerts";
 
 const pushRegistrationState = {
   token: null,
@@ -66,6 +67,7 @@ async function attachPushListeners() {
             id: Date.now(),
             title,
             body,
+            channelId: FOREGROUND_ALERT_CHANNEL_ID,
             schedule: { at: new Date(Date.now() + 250) }
           }
         ]
@@ -80,6 +82,20 @@ async function attachPushListeners() {
 
 async function initializePushNotifications() {
   if (!canUseServerSidePush()) return null;
+
+  if (localNotifications?.createChannel) {
+    try {
+      await localNotifications.createChannel({
+        id: FOREGROUND_ALERT_CHANNEL_ID,
+        name: "Foreground Wait Alerts",
+        description: "Shows wait time alerts while the app is open.",
+        importance: 5,
+        visibility: 1
+      });
+    } catch (error) {
+      console.warn("Could not create local notification channel:", error);
+    }
+  }
 
   const storedToken = pushRegistrationState.token || getStoredPushToken();
   if (storedToken) {
