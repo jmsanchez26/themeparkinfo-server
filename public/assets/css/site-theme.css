@@ -16,6 +16,7 @@ body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--bg);
   color: var(--text);
+  padding-bottom: 92px;
 }
 
 a {
@@ -139,50 +140,80 @@ a {
 }
 
 .site-footer {
-  margin-top: 32px;
-  padding: 20px 16px 28px;
-  background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%);
-  border-top: 1px solid rgba(59, 130, 246, 0.18);
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 35;
+  padding: 0;
+  background: rgba(247, 249, 252, 0.94);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid rgba(148, 163, 184, 0.22);
 }
 
 .site-footer-inner {
   width: min(960px, 100%);
   margin: 0 auto;
-  background: rgba(255, 255, 255, 0.78);
-  border-radius: 18px;
-  padding: 20px;
-  box-shadow: 0 10px 30px rgba(59, 130, 246, 0.12);
+  background: #ffffff;
+  border-radius: 0;
+  padding: 8px 10px 10px;
+  box-shadow: 0 -6px 18px rgba(15, 23, 42, 0.08);
 }
 
-.site-footer-brand h3 {
-  margin: 0 0 8px;
-  font-size: 1.1rem;
+.footer-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
 }
 
-.site-footer-brand p,
-.site-footer-note {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
-.site-footer-links {
+.footer-shortcut {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px 12px;
-  margin: 16px 0;
-}
-
-.site-footer-links a {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 56px;
+  padding: 6px 4px;
   text-decoration: none;
-  background: #eff6ff;
-  color: #1d4ed8;
-  border-radius: 999px;
-  padding: 8px 12px;
-  font-size: 0.9rem;
+  color: #475569;
+  background: transparent;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  text-align: center;
   font-weight: 600;
 }
 
-.site-footer-links a:hover {
-  background: #dbeafe;
+.footer-shortcut i {
+  font-size: 1.1rem;
+  color: #2563eb;
+}
+
+.footer-shortcut span {
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.footer-shortcut:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: rgba(59, 130, 246, 0.18);
+}
+
+@media (max-width: 640px) {
+  .site-footer-inner {
+    padding: 8px 6px 10px;
+  }
+
+  .footer-shortcuts {
+    gap: 2px;
+  }
+
+  .footer-shortcut {
+    min-height: 54px;
+    padding: 6px 2px;
+  }
+
+  .footer-shortcut span {
+    font-size: 0.7rem;
+  }
 }
