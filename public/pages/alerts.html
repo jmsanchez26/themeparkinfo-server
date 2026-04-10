@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Adventure Scout - Alert Manager</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <link rel="stylesheet" href="../assets/css/site-theme.css" />
+  <link rel="stylesheet" href="../assets/css/navigation.css" />
+  <link rel="stylesheet" href="../assets/css/alertsManager.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css"/>
+</head>
+<body>
+  <div id="header-placeholder"></div>
+  <div id="nav-placeholder"></div>
+
+  <main class="alerts-page">
+    <section class="alerts-hero">
+      <h2>Active Wait Time Alerts</h2>
+      <p>Review the alerts currently stored on the server, adjust the trigger threshold, or remove an alert you no longer need.</p>
+    </section>
+
+    <section class="alerts-toolbar">
+      <button id="refreshAlertsBtn" type="button">
+        <i class="fa fa-refresh"></i> Refresh Alerts
+      </button>
+      <div class="alerts-status" id="alertsStatus">Loading alerts...</div>
+    </section>
+
+    <section class="alerts-list" id="alertsList"></section>
+  </main>
+
+  <script src="../assets/js/apiBase.js"></script>
+  <script src="../assets/js/navigation.js"></script>
+  <script src="../assets/js/alertsManager.js"></script>
+</body>
+</html>

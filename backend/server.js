@@ -171,6 +171,25 @@ function findTriggeredAlertsForPark(park) {
   return triggered;
 }
 
+function buildAlertSnapshot(alert) {
+  const cachedData = cache[alert.park]?.data;
+  const match = cachedData?.liveData?.find(item => item.name === alert.name);
+  const status = match?.status || "Unknown";
+  const currentWait = match?.queue?.STANDBY?.waitTime ?? null;
+  const statusLower = String(status).toLowerCase();
+  const isTriggered =
+    (statusLower === "operating" && typeof currentWait === "number" && currentWait <= alert.waitTime) ||
+    (statusLower && statusLower !== "operating");
+
+  return {
+    ...alert,
+    status,
+    currentWait,
+    isTriggered,
+    lastUpdated: cache[alert.park]?.lastUpdated || null
+  };
+}
+
 async function sendTriggeredNotifications(triggeredAlerts) {
   if (!triggeredAlerts.length) return;
 
@@ -322,6 +341,65 @@ app.post("/api/alerts", async (req, res) => {
   res.status(201).json({
     success: true,
     message: "Alert saved for server-side push notifications"
+  });
+});
+
+app.get("/api/alerts", (req, res) => {
+  const alerts = pushState.alerts
+    .map(buildAlertSnapshot)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  res.json({
+    data: alerts
+  });
+});
+
+app.patch("/api/alerts/:id", async (req, res) => {
+  const alertId = String(req.params.id || "").trim();
+  const waitTime = Number(req.body.waitTime);
+
+  if (!alertId || !Number.isFinite(waitTime) || waitTime < 0) {
+    return res.status(400).json({
+      error: true,
+      message: "Missing or invalid alert update"
+    });
+  }
+
+  const alert = pushState.alerts.find(entry => entry.id === alertId);
+  if (!alert) {
+    return res.status(404).json({
+      error: true,
+      message: "Alert not found"
+    });
+  }
+
+  alert.waitTime = waitTime;
+  alert.updatedAt = new Date().toISOString();
+  await persistAlerts();
+
+  return res.json({
+    success: true,
+    data: buildAlertSnapshot(alert)
+  });
+});
+
+app.delete("/api/alerts/:id", async (req, res) => {
+  const alertId = String(req.params.id || "").trim();
+  const previousCount = pushState.alerts.length;
+
+  pushState.alerts = pushState.alerts.filter(entry => entry.id !== alertId);
+
+  if (pushState.alerts.length === previousCount) {
+    return res.status(404).json({
+      error: true,
+      message: "Alert not found"
+    });
+  }
+
+  await persistAlerts();
+
+  return res.json({
+    success: true
   });
 });
 
