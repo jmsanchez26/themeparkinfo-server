@@ -18,6 +18,10 @@ body {
   color: var(--text);
 }
 
+a {
+  color: inherit;
+}
+
 /* Header */
 .app-header {
   position: sticky;
@@ -132,4 +136,53 @@ body {
   background: none;
   border: none;
   font-size: 1.4rem;
+}
+
+.site-footer {
+  margin-top: 32px;
+  padding: 20px 16px 28px;
+  background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%);
+  border-top: 1px solid rgba(59, 130, 246, 0.18);
+}
+
+.site-footer-inner {
+  width: min(960px, 100%);
+  margin: 0 auto;
+  background: rgba(255, 255, 255, 0.78);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: 0 10px 30px rgba(59, 130, 246, 0.12);
+}
+
+.site-footer-brand h3 {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+}
+
+.site-footer-brand p,
+.site-footer-note {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.site-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  margin: 16px 0;
+}
+
+.site-footer-links a {
+  text-decoration: none;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.site-footer-links a:hover {
+  background: #dbeafe;
 }

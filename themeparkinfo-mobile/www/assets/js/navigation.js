@@ -4,15 +4,18 @@
 function loadSiteComponents() {
   const headerPlaceholder = document.getElementById('header-placeholder');
   const navPlaceholder = document.getElementById('nav-placeholder');
+  const footerPlaceholder = document.getElementById('footer-placeholder');
 
   // Adjust paths based on your folder structure
   const fetchHeader = fetch('../elements/header.html').then(res => res.text());
   const fetchNav = fetch('../elements/nav.html').then(res => res.text());
+  const fetchFooter = fetch('../elements/footer.html').then(res => res.text());
 
-  Promise.all([fetchHeader, fetchNav])
-    .then(([headerHtml, navHtml]) => {
+  Promise.all([fetchHeader, fetchNav, fetchFooter])
+    .then(([headerHtml, navHtml, footerHtml]) => {
       if (headerPlaceholder) headerPlaceholder.innerHTML = headerHtml;
       if (navPlaceholder) navPlaceholder.innerHTML = navHtml;
+      if (footerPlaceholder) footerPlaceholder.innerHTML = footerHtml;
       
       // We don't need to call initMenuLogic() if we use delegation below
     })
