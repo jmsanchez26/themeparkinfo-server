@@ -347,6 +347,7 @@ app.post("/api/alerts", async (req, res) => {
 app.get("/api/alerts", (req, res) => {
   const alerts = pushState.alerts
     .map(buildAlertSnapshot)
+    .filter(alert => !alert.isTriggered)
     .sort((a, b) => a.name.localeCompare(b.name));
 
   res.json({
