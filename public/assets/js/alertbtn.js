@@ -173,35 +173,45 @@ async function saveServerSideAlert(item, waitTime) {
     throw new Error("Push notifications were not granted on this device");
   }
 
-  const response = await fetch(`${window.__API_BASE__}/api/alerts`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      park: alertVar,
-      name: item.name,
-      waitTime,
-      deviceToken
-    })
-  });
-
-  if (!response.ok) {
-    let message = `Failed to save alert (${response.status})`;
-
+  for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const payload = await response.json();
-      if (payload?.message) {
-        message = `${message}: ${payload.message}`;
+      const response = await fetch(`${window.__API_BASE__}/api/alerts`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          park: alertVar,
+          name: item.name,
+          waitTime,
+          deviceToken
+        })
+      });
+
+      if (!response.ok) {
+        let message = `Failed to save alert (${response.status})`;
+
+        try {
+          const payload = await response.json();
+          if (payload?.message) {
+            message = `${message}: ${payload.message}`;
+          }
+        } catch (error) {
+          // Keep the HTTP status message when the response body is not JSON.
+        }
+
+        throw new Error(message);
       }
+
+      return response.json();
     } catch (error) {
-      // Keep the HTTP status message when the response body is not JSON.
+      if (attempt === 2) {
+        throw error;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 1200));
     }
-
-    throw new Error(message);
   }
-
-  return response.json();
 }
 
 function openSetAlertModal(item) {

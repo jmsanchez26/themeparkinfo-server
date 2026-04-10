@@ -1,6 +1,8 @@
 
 let waitTimeAlerts = JSON.parse(localStorage.getItem("waitTimeAlerts"));
 if (!Array.isArray(waitTimeAlerts)) waitTimeAlerts = [];
+let parkDataRequestInFlight = false;
+let parkDataRetryTimeoutId = null;
 
 /*************************
  * LOG SAVED ALERTS
@@ -12,16 +14,29 @@ function logSavedAlerts(context) {
 /*************************
  * FETCH DATA
  *************************/
-function getParkData() {
+function queueParkDataRetry(delayMs = 3000) {
+  if (parkDataRetryTimeoutId) return;
 
-fetch(apiUrl)
-  .then(res => {
+  parkDataRetryTimeoutId = setTimeout(() => {
+    parkDataRetryTimeoutId = null;
+    getParkData();
+  }, delayMs);
+}
+
+async function getParkData() {
+  if (parkDataRequestInFlight) return;
+  parkDataRequestInFlight = true;
+
+  try {
+    const res = await fetch(apiUrl, {
+      cache: "no-store"
+    });
+
     if (!res.ok) {
       throw new Error("Server returned " + res.status);
     }
-    return res.json();
-  })
-  .then(response => {
+
+    const response = await res.json();
 
     if (response.error) {
       console.warn("API Error:", response.message);
@@ -131,9 +146,12 @@ fetch(apiUrl)
 
       renderAll();
       checkAlerts(alertVar);
-
-    })
-    .catch(err => console.error("API Error:", err));
+  } catch (err) {
+    console.error("API Error:", err);
+    queueParkDataRetry();
+  } finally {
+    parkDataRequestInFlight = false;
+  }
 }
 
 function resetData() {
