@@ -191,6 +191,65 @@
   color: #475569;
 }
 
+.alerts-confirm-modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.62);
+  z-index: 1000;
+  padding: 20px;
+}
+
+.alerts-confirm-modal.open {
+  display: flex;
+}
+
+.alerts-confirm-dialog {
+  width: min(100%, 420px);
+  background: #fff;
+  border-radius: 20px;
+  padding: 22px;
+  box-shadow: 0 22px 45px rgba(15, 23, 42, 0.22);
+}
+
+.alerts-confirm-dialog h3 {
+  margin: 0 0 10px;
+  font-size: 1.15rem;
+}
+
+.alerts-confirm-dialog p {
+  margin: 0;
+  color: #475569;
+  line-height: 1.55;
+}
+
+.alerts-confirm-actions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.alerts-confirm-btn {
+  border: none;
+  border-radius: 12px;
+  padding: 11px 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.alerts-confirm-btn.cancel {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.alerts-confirm-btn.delete {
+  background: #dc2626;
+  color: #fff;
+}
+
 @media (max-width: 640px) {
   .alert-stat-grid {
     grid-template-columns: 1fr;

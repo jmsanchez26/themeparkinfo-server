@@ -1,6 +1,7 @@
 (function () {
   const baseUrl = window.__API_BASE__ || "";
   let alertsRefreshTimerId = null;
+  let pendingDeleteAlert = null;
 
   function formatParkName(park) {
     const labels = {
@@ -168,6 +169,22 @@
     }
   }
 
+  function openDeleteModal(alertId, alertName) {
+    pendingDeleteAlert = { id: alertId, name: alertName };
+
+    const modal = document.getElementById("deleteAlertModal");
+    const text = document.getElementById("deleteAlertText");
+    if (!modal || !text) return;
+
+    text.textContent = `Delete the alert for ${alertName}? This cannot be undone.`;
+    modal.classList.add("open");
+  }
+
+  function closeDeleteModal() {
+    pendingDeleteAlert = null;
+    document.getElementById("deleteAlertModal")?.classList.remove("open");
+  }
+
   document.addEventListener("click", async event => {
     const button = event.target.closest("[data-action]");
     if (!button) return;
@@ -194,8 +211,10 @@
       }
 
       if (action === "delete") {
-        status.textContent = "Deleting alert...";
-        await deleteAlert(alertId);
+        const title = card.querySelector("h3")?.textContent || "this alert";
+        openDeleteModal(alertId, title);
+        button.disabled = false;
+        return;
       }
 
       await loadAlerts();
@@ -211,6 +230,30 @@
     if (refreshButton) {
       refreshButton.addEventListener("click", loadAlerts);
     }
+
+    document.getElementById("cancelDeleteAlertBtn")?.addEventListener("click", closeDeleteModal);
+
+    document.getElementById("confirmDeleteAlertBtn")?.addEventListener("click", async () => {
+      if (!pendingDeleteAlert) return;
+
+      const status = document.getElementById("alertsStatus");
+      status.textContent = "Deleting alert...";
+
+      try {
+        await deleteAlert(pendingDeleteAlert.id);
+        closeDeleteModal();
+        await loadAlerts();
+      } catch (error) {
+        console.error("Delete failed:", error);
+        status.textContent = error.message;
+      }
+    });
+
+    document.getElementById("deleteAlertModal")?.addEventListener("click", event => {
+      if (event.target.id === "deleteAlertModal") {
+        closeDeleteModal();
+      }
+    });
 
     loadAlerts();
   });

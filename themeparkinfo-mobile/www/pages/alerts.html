@@ -29,6 +29,17 @@
     <section class="alerts-list" id="alertsList"></section>
   </main>
 
+  <div class="alerts-confirm-modal" id="deleteAlertModal" aria-hidden="true">
+    <div class="alerts-confirm-dialog">
+      <h3>Delete Alert</h3>
+      <p id="deleteAlertText"></p>
+      <div class="alerts-confirm-actions">
+        <button class="alerts-confirm-btn cancel" id="cancelDeleteAlertBtn" type="button">Cancel</button>
+        <button class="alerts-confirm-btn delete" id="confirmDeleteAlertBtn" type="button">Delete</button>
+      </div>
+    </div>
+  </div>
+
   <script src="../assets/js/apiBase.js"></script>
   <script src="../assets/js/navigation.js"></script>
   <script src="../assets/js/alertsManager.js"></script>
