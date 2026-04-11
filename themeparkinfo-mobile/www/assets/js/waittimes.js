@@ -124,16 +124,28 @@ async function getParkData() {
 
         if (type === "show" && hasShowTimes.length > 0) {
           const now = new Date();
-          
-          // Filter for showtimes that start after right now
-          upcomingShowTimes = hasShowTimes.filter(show => {
-            return new Date(show.startTime) > now;
+
+          const normalizedShowTimes = hasShowTimes
+            .map(show => ({
+              start: show.startTime ? new Date(show.startTime) : null,
+              end: show.endTime ? new Date(show.endTime) : null
+            }))
+            .filter(show => show.start && !Number.isNaN(show.start.getTime()))
+            .sort((a, b) => a.start - b.start);
+
+          const activeShow = normalizedShowTimes.find(show => {
+            const endTime = show.end && !Number.isNaN(show.end.getTime()) ? show.end : null;
+            return endTime ? show.start <= now && now < endTime : show.start <= now;
           });
 
-          if (upcomingShowTimes.length > 0) {
-            nextShowTime = formatLLTime(upcomingShowTimes[0].endTime);
-          }else{
-            status = 'Closed';
+          upcomingShowTimes = normalizedShowTimes.filter(show => show.start > now);
+
+          if (activeShow) {
+            nextShowTime = activeShow.end
+              ? `Open now until ${formatLLTime(activeShow.end.toISOString())}`
+              : "Open now";
+          } else if (upcomingShowTimes.length > 0) {
+            nextShowTime = `Next: ${formatLLTime(upcomingShowTimes[0].start.toISOString())}`;
           }
         }
 

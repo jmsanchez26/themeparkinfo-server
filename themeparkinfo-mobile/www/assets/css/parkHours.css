@@ -3,20 +3,109 @@
 ============================ */
 
 .park-hours-container {
+  position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
-  background: linear-gradient(135deg, #6366f1, #3b82f6);
   color: #fff;
-  padding: 16px 18px;
+  padding: 22px 20px;
   margin: 0 16px 18px;
-  box-shadow: 0 16px 28px rgba(59, 130, 246, 0.2);
-  border-radius: 18px;
+  min-height: 304px;
+  overflow: hidden;
+  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.16);
+  border-radius: 22px;
+  background-color: #1d4ed8;
+}
+
+.park-hours-container::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  transform: scale(1.02);
+}
+
+.park-hours-container::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.14) 0%, rgba(15, 23, 42, 0.76) 100%);
+}
+
+.park-hours-container[data-park-theme="mg"]::before {
+  background-image:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.14), rgba(37, 99, 235, 0.2)),
+    url("../images/parks/magic-kingdom-better.jpg");
+}
+
+.park-hours-container[data-park-theme="epcot"]::before {
+  background-image:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.14), rgba(14, 165, 233, 0.2)),
+    url("../images/parks/epcot.jpg");
+}
+
+.park-hours-container[data-park-theme="hollywood"]::before {
+  background-image:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.16), rgba(59, 130, 246, 0.18)),
+    url("../images/parks/hollywood-studios.jpg");
+}
+
+.park-hours-container[data-park-theme="ak"]::before {
+  background-image:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.14), rgba(34, 197, 94, 0.18)),
+    url("../images/parks/animal-kingdom.jpg");
+}
+
+.park-hours-container[data-park-theme="disneyland"]::before {
+  background-image:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.14), rgba(245, 158, 11, 0.18)),
+    url("../images/parks/disneyland.jpg");
+}
+
+.park-hours-container[data-park-theme="caliadv"]::before {
+  background-image:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.14), rgba(249, 115, 22, 0.18)),
+    url("../images/parks/california-adventure.jpg");
+}
+
+.park-hours-container[data-park-theme="usfl"]::before {
+  background-image:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.16), rgba(8, 145, 178, 0.2)),
+    url("../images/parks/universal-florida.jpg");
+}
+
+.park-hours-container[data-park-theme="usHollywood"]::before {
+  background-image:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.18), rgba(239, 68, 68, 0.2)),
+    url("../images/parks/universal-hollywood-better.jpg");
+}
+
+.park-hours-container[data-park-theme="islandofAdventure"]::before {
+  background-image:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.16), rgba(20, 184, 166, 0.18)),
+    url("../images/parks/islands-of-adventure-better.jpg");
+}
+
+.park-hours-container[data-park-theme="epic"]::before {
+  background-image:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.16), rgba(124, 58, 237, 0.18)),
+    url("../images/parks/epic-universe.jpg");
+}
+
+.park-hours-container[data-park-theme="volcanoBay"]::before {
+  background-image:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.16), rgba(8, 145, 178, 0.18)),
+    url("../images/parks/volcano-bay.jpg");
 }
 
 .park-hours-left {
   display: flex;
   align-items: center;
+  width: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 .park-icon {
@@ -31,26 +120,30 @@
 .park-hours-text {
   display: flex;
   flex-direction: column;
+  gap: 8px;
 }
 
 .park-hours-text .hours-title {
-  font-size: 18px;
-  font-weight: 700;
-  margin-bottom: 4px;
-  letter-spacing: 0.3px;
+  font-size: 1.15rem;
+  font-weight: 800;
+  margin-bottom: 0;
+  letter-spacing: 0.2px;
+  text-shadow: 0 2px 12px rgba(15, 23, 42, 0.28);
 }
 
 .park-hours-text .hours-details {
-  font-size: 14px;
+  font-size: 0.9rem;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 2px 12px rgba(15, 23, 42, 0.34);
 }
 
 .park-hours-text .early-entry,
-.park-hours-text .open-hours {
-  font-weight: 500;
+.park-hours-text .open-hours,
+.park-hours-text .ext-hours {
+  font-weight: 600;
 }
 
 .park-hours-right {
@@ -64,4 +157,20 @@
   background: url("https://img.icons8.com/emoji/48/fireworks-emoji.png")
     no-repeat center center;
   background-size: contain;
+}
+
+@media (max-width: 640px) {
+  .park-hours-container {
+    min-height: 248px;
+    padding: 20px 18px;
+    border-radius: 20px;
+  }
+
+  .park-hours-text .hours-title {
+    font-size: 1.05rem;
+  }
+
+  .park-hours-text .hours-details {
+    font-size: 0.84rem;
+  }
 }

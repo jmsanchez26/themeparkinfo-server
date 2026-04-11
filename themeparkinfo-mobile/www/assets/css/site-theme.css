@@ -205,25 +205,25 @@ a {
 .park-shortcut-card.wdw {
   background-image:
     linear-gradient(135deg, rgba(15, 23, 42, 0.14), rgba(37, 99, 235, 0.28)),
-    url("https://upload.wikimedia.org/wikipedia/commons/3/3b/Magic_Kingdom_castle.png");
+    url("../images/parks/magic-kingdom-better.jpg");
 }
 
 .park-shortcut-card.disneyland {
   background-image:
     linear-gradient(135deg, rgba(17, 24, 39, 0.16), rgba(245, 158, 11, 0.24)),
-    url("https://upload.wikimedia.org/wikipedia/commons/c/c0/SleepingBeautyCastle.JPG");
+    url("../images/parks/disneyland.jpg");
 }
 
 .park-shortcut-card.orlando {
   background-image:
     linear-gradient(135deg, rgba(15, 23, 42, 0.18), rgba(8, 145, 178, 0.24)),
-    url("https://upload.wikimedia.org/wikipedia/commons/4/4d/UniversalStudiosFloridaEntrance.JPG");
+    url("../images/parks/universal-florida.jpg");
 }
 
 .park-shortcut-card.hollywood {
   background-image:
     linear-gradient(135deg, rgba(15, 23, 42, 0.22), rgba(239, 68, 68, 0.24)),
-    url("https://upload.wikimedia.org/wikipedia/commons/5/56/Universal_Studios_Hollywood_Entrance_%282570304287%29.jpg");
+    url("../images/parks/universal-hollywood-better.jpg");
 }
 
 .park-shortcut-overlay {
@@ -243,15 +243,7 @@ a {
 }
 
 .park-shortcut-icon {
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.9);
-  color: #2563eb;
-  font-size: 1.2rem;
+  display: none;
 }
 
 .park-shortcut-name {
@@ -277,22 +269,20 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.14);
+  padding: 0;
   color: rgba(255, 255, 255, 0.96);
   font-size: 0.78rem;
   font-weight: 600;
   line-height: 1.35;
-  backdrop-filter: blur(4px);
+  text-shadow: 0 2px 10px rgba(15, 23, 42, 0.34);
 }
 
 .park-hours-line.primary {
-  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
 }
 
 .park-hours-line.empty {
-  color: rgba(255, 255, 255, 0.72);
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .park-shortcuts-credit {

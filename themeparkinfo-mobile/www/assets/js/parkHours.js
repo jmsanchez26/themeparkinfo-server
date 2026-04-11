@@ -5,6 +5,32 @@
 const parkHoursCache =
   JSON.parse(localStorage.getItem("parkHoursCache")) || {};
 
+const PARK_HOURS_TITLES = {
+  mg: "Magic Kingdom Hours",
+  epcot: "EPCOT Hours",
+  hollywood: "Hollywood Studios Hours",
+  ak: "Animal Kingdom Hours",
+  disneyland: "Disneyland Hours",
+  caliadv: "California Adventure Hours",
+  usfl: "Universal Studios Florida Hours",
+  usHollywood: "Universal Studios Hollywood Hours",
+  islandofAdventure: "Islands of Adventure Hours",
+  epic: "Epic Universe Hours",
+  volcanoBay: "Volcano Bay Hours"
+};
+
+function updateParkHoursTheme(parkKey) {
+  const container = document.querySelector(".park-hours-container");
+  if (!container) return;
+
+  container.setAttribute("data-park-theme", parkKey);
+
+  const titleEl = container.querySelector(".hours-title");
+  if (titleEl) {
+    titleEl.textContent = PARK_HOURS_TITLES[parkKey] || "Park Hours";
+  }
+}
+
 /*************************
  * GET PARK HOURS (CACHED)
  *************************/
@@ -13,6 +39,8 @@ async function getParkHours(givenparkName) {
   // Normalize incoming names
   if (givenparkName === "magic-kingdom") givenparkName = "mg";
   else if (givenparkName === "animalKingdom") givenparkName = "ak";
+
+  updateParkHoursTheme(givenparkName);
 
   const parkId = PARK_IDS[givenparkName];
 

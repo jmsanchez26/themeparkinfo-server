@@ -26,22 +26,26 @@
     {
       key: "wdw",
       scheduleId: "75ea578a-adc8-4116-a54d-dccb60765ef9",
-      timezone: "America/New_York"
+      timezone: "America/New_York",
+      mode: "disney"
     },
     {
       key: "disneyland",
       scheduleId: "7340550b-c14d-4def-80bb-acdb51d49a66",
-      timezone: "America/Los_Angeles"
+      timezone: "America/Los_Angeles",
+      mode: "disney"
     },
     {
       key: "usf",
       scheduleId: "eb3f4560-2383-4a36-9152-6b3e5ed6bc57",
-      timezone: "America/New_York"
+      timezone: "America/New_York",
+      mode: "universal"
     },
     {
       key: "ush",
       scheduleId: "bc4005c5-8c7e-41d7-b349-cdddf1796427",
-      timezone: "America/Los_Angeles"
+      timezone: "America/Los_Angeles",
+      mode: "universal"
     }
   ];
 
@@ -88,6 +92,16 @@
     return `${prefix}: ${formatTimeInZone(entry.openingTime, timezone)} - ${formatTimeInZone(entry.closingTime, timezone)}`;
   }
 
+  function getScheduleEntriesForToday(schedule, timezone, date) {
+    const dateKey = getDateKeyInTimezone(date, timezone);
+
+    if (!Array.isArray(schedule)) {
+      return [];
+    }
+
+    return schedule.filter(entry => entry?.date === dateKey);
+  }
+
   function setHoursCardState(key, lines) {
     const container = document.querySelector(`[data-hours-card="${key}"]`);
     if (!container) return;
@@ -112,11 +126,7 @@
           }
 
           const payload = await response.json();
-          const dateKey = getDateKeyInTimezone(today, card.timezone);
-          const todaySchedule = Array.isArray(payload?.schedule)
-            ? payload.schedule.find(entry => entry.date === dateKey)
-            : null;
-          const entries = Array.isArray(todaySchedule?.openingHours) ? todaySchedule.openingHours : [];
+          const entries = getScheduleEntriesForToday(payload?.schedule, card.timezone, today);
           const operating = entries.find(entry => String(entry.type || "").toUpperCase() === "OPERATING");
           const earlyEntry = entries.find(entry => {
             const type = String(entry.type || "").toUpperCase();
@@ -129,18 +139,31 @@
             return type === "TICKETED_EVENT" && description.includes("extended");
           });
 
-          setHoursCardState(card.key, [
-            { text: buildHoursLine("Open", operating, card.timezone, "Open hours not posted yet"), empty: !operating },
-            { text: buildHoursLine("Early entry", earlyEntry, card.timezone, "No early entry today"), empty: !earlyEntry },
-            { text: buildHoursLine("Extended hours", extendedHours, card.timezone, "No extended hours today"), empty: !extendedHours }
-          ]);
+          const lines = card.mode === "disney"
+            ? [
+                { text: buildHoursLine("Early entry", earlyEntry, card.timezone, "No early entry today"), empty: !earlyEntry },
+                { text: buildHoursLine("Open", operating, card.timezone, "Open hours not posted yet"), empty: !operating },
+                { text: buildHoursLine("Extended hours", extendedHours, card.timezone, "No extended hours today"), empty: !extendedHours }
+              ]
+            : [
+                { text: buildHoursLine("Open", operating, card.timezone, "Open hours not posted yet"), empty: !operating }
+              ];
+
+          setHoursCardState(card.key, lines);
         } catch (error) {
           console.error(`Homepage schedule failed for ${card.key}:`, error);
-          setHoursCardState(card.key, [
-            { text: "Hours are not available right now", empty: true },
-            { text: "Early entry will show here", empty: true },
-            { text: "Extended hours will show here", empty: true }
-          ]);
+          setHoursCardState(
+            card.key,
+            card.mode === "disney"
+              ? [
+                  { text: "Early entry is not available right now", empty: true },
+                  { text: "Hours are not available right now", empty: true },
+                  { text: "Extended hours are not available right now", empty: true }
+                ]
+              : [
+                  { text: "Hours are not available right now", empty: true }
+                ]
+          );
         }
       })
     );
