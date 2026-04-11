@@ -10,7 +10,9 @@ const isNativeApp =
 
 const pushNotifications = window.Capacitor?.Plugins?.PushNotifications;
 const localNotifications = window.Capacitor?.Plugins?.LocalNotifications;
+const appPlugin = window.Capacitor?.Plugins?.App;
 const FOREGROUND_ALERT_CHANNEL_ID = "foreground-wait-alerts";
+const ALERTS_PAGE_PATH = "/pages/alerts.html";
 
 const pushRegistrationState = {
   token: null,
@@ -38,6 +40,24 @@ function storePushToken(token) {
   } catch (error) {
     console.warn("Could not persist push token:", error);
   }
+}
+
+function navigateToAlertsPage() {
+  const currentPath = window.location.pathname || "";
+  if (currentPath === ALERTS_PAGE_PATH) return;
+
+  window.location.href = ALERTS_PAGE_PATH;
+}
+
+function resolveNotificationTarget(data = {}) {
+  if (!data || typeof data !== "object") return null;
+
+  const targetPath = data.targetPath || data.path || data.route;
+  if (targetPath === ALERTS_PAGE_PATH) {
+    return ALERTS_PAGE_PATH;
+  }
+
+  return null;
 }
 
 async function attachPushListeners() {
@@ -68,6 +88,9 @@ async function attachPushListeners() {
             title,
             body,
             channelId: FOREGROUND_ALERT_CHANNEL_ID,
+            extra: {
+              targetPath: resolveNotificationTarget(notification.data) || ALERTS_PAGE_PATH
+            },
             schedule: { at: new Date(Date.now() + 250) }
           }
         ]
@@ -76,6 +99,28 @@ async function attachPushListeners() {
       console.error("Foreground notification display failed:", error);
     }
   });
+
+  await pushNotifications.addListener("pushNotificationActionPerformed", event => {
+    if (resolveNotificationTarget(event.notification?.data) === ALERTS_PAGE_PATH) {
+      navigateToAlertsPage();
+    }
+  });
+
+  if (localNotifications?.addListener) {
+    await localNotifications.addListener("localNotificationActionPerformed", event => {
+      if (resolveNotificationTarget(event.notification?.extra) === ALERTS_PAGE_PATH) {
+        navigateToAlertsPage();
+      }
+    });
+  }
+
+  if (appPlugin?.addListener) {
+    await appPlugin.addListener("appUrlOpen", event => {
+      if (typeof event?.url === "string" && event.url.includes("themeparkinfo://alerts")) {
+        navigateToAlertsPage();
+      }
+    });
+  }
 
   pushRegistrationState.listenersAttached = true;
 }

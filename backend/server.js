@@ -221,7 +221,8 @@ async function sendTriggeredNotifications(triggeredAlerts) {
           },
           data: {
             source: "wait-alert",
-            park: alerts[0].park
+            park: alerts[0].park,
+            targetPath: "/pages/alerts.html"
           },
           android: {
             priority: "high"
