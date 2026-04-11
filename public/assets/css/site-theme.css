@@ -46,54 +46,200 @@ a {
   color: green;
 }
 
-/* Quick Actions */
-.quick-actions {
+.home-page {
+  padding: 18px 16px 112px;
+  display: grid;
+  gap: 22px;
+}
+
+.hero-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.hero-copy {
+  padding: 22px;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(255,255,255,0.28), transparent 28%),
+    linear-gradient(145deg, #0f172a, #1d4ed8 62%, #38bdf8);
+  color: white;
+  box-shadow: 0 22px 40px rgba(29, 78, 216, 0.2);
+}
+
+.hero-kicker,
+.section-kicker {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hero-kicker {
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.hero-copy h2 {
+  margin: 12px 0 10px;
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  line-height: 1.1;
+}
+
+.hero-copy p {
+  margin: 0;
+  max-width: 52ch;
+  color: rgba(255, 255, 255, 0.88);
+  line-height: 1.55;
+}
+
+.hero-actions {
   display: flex;
   gap: 12px;
-  padding: 16px;
-  overflow-x: auto;
+  flex-wrap: wrap;
+  margin-top: 20px;
 }
 
-.quick-actions button {
-  flex: 0 0 auto;
-  border: none;
-  background: var(--primary);
-  color: white;
-  padding: 10px 16px;
+.hero-action {
+  text-decoration: none;
   border-radius: 999px;
-  font-size: 0.9rem;
+  padding: 12px 18px;
+  font-weight: 700;
 }
 
-.quick-actions button i {
-  margin-right: 6px;
+.hero-action.primary {
+  background: #ffffff;
+  color: #1d4ed8;
 }
 
-/* Featured */
-.featured {
-  padding: 0 16px 16px;
+.hero-action.secondary {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.22);
 }
 
-.featured-card {
+.hero-highlight {
   background: linear-gradient(135deg, #6366f1, #3b82f6);
   color: white;
-  padding: 16px;
-  border-radius: var(--radius);
+  padding: 20px;
+  border-radius: 24px;
+  box-shadow: 0 22px 40px rgba(59, 130, 246, 0.18);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
-.featured-card .tag {
+.hero-highlight .tag {
   font-size: 0.75rem;
-  opacity: 0.9;
+  opacity: 0.92;
   display: inline-block;
   margin-bottom: 10px;
 }
 
-/* Attractions */
-.attractions {
-  padding: 0 16px 80px;
+.hero-highlight h3 {
+  margin: 0 0 8px;
+  font-size: 1.3rem;
 }
 
+.hero-highlight p {
+  margin: 0;
+  color: rgba(255,255,255,0.9);
+}
+
+.hero-highlight strong {
+  margin-top: 14px;
+  font-size: 2rem;
+}
+
+.home-section {
+  display: grid;
+  gap: 14px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.section-heading h2 {
+  margin: 6px 0 0;
+  font-size: 1.35rem;
+}
+
+.section-heading p {
+  margin: 0;
+  color: var(--muted);
+  max-width: 48ch;
+}
+
+.section-kicker {
+  color: #2563eb;
+}
+
+.park-shortcuts-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.park-shortcut-card {
+  text-decoration: none;
+  background: #ffffff;
+  border-radius: 22px;
+  padding: 18px;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.07);
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.park-shortcut-card.wdw {
+  background: linear-gradient(135deg, #eef2ff, #dbeafe);
+}
+
+.park-shortcut-card.disneyland {
+  background: linear-gradient(135deg, #fff7ed, #fef3c7);
+}
+
+.park-shortcut-card.orlando {
+  background: linear-gradient(135deg, #ecfeff, #dbeafe);
+}
+
+.park-shortcut-card.hollywood {
+  background: linear-gradient(135deg, #fff1f2, #fee2e2);
+}
+
+.park-shortcut-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.75);
+  color: #2563eb;
+  font-size: 1.2rem;
+}
+
+.park-shortcut-name {
+  font-weight: 800;
+  font-size: 1rem;
+}
+
+.park-shortcut-note {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.attractions,
 .events {
-  padding: 0 16px 100px;
+  padding: 0;
 }
 
 .attraction-card {
@@ -279,6 +425,29 @@ a {
 }
 
 @media (max-width: 640px) {
+  .home-page {
+    padding: 14px 14px 108px;
+    gap: 18px;
+  }
+
+  .hero-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-copy,
+  .hero-highlight {
+    padding: 18px;
+    border-radius: 20px;
+  }
+
+  .park-shortcuts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .section-heading {
+    align-items: start;
+  }
+
   .site-footer-inner {
     padding: 8px 6px 10px;
   }

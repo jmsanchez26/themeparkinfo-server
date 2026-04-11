@@ -12,41 +12,94 @@
   <div id="header-placeholder"></div>
   <div id="nav-placeholder"></div>
 
-  <section class="featured">
-    <h2>Lowest Wait Right Now</h2>
-    <div class="featured-card" id="featuredRideCard">
-      <span class="tag">Loading live data</span>
-      <h3>Finding the shortest wait</h3>
-      <p>Checking all parks now</p>
-      <strong>...</strong>
-    </div>
-  </section>
-
-  <section class="attractions">
-    <h2>Lowest Waits Across Parks</h2>
-    <div id="lowestWaitsList">
-      <div class="attraction-card">
-        <div>
-          <h3>Loading rides...</h3>
-          <p>Pulling current waits from all parks</p>
+  <main class="home-page">
+    <section class="hero-panel">
+      <div class="hero-copy">
+        <span class="hero-kicker">Live Theme Park Guide</span>
+        <h2>See the shortest waits and next big entertainment faster.</h2>
+        <p>Adventure Scout puts the best ride opportunities and upcoming parades in one simple view, so you can spend less time searching and more time enjoying the park.</p>
+        <div class="hero-actions">
+          <a class="hero-action primary" href="/pages/wdw.html">Check Wait Times</a>
+          <a class="hero-action secondary" href="/pages/alerts.html">Manage Alerts</a>
         </div>
-        <span class="wait">...</span>
       </div>
-    </div>
-  </section>
+      <div class="hero-highlight" id="featuredRideCard">
+        <span class="tag">Loading live data</span>
+        <h3>Finding the shortest wait</h3>
+        <p>Checking all parks now</p>
+        <strong>...</strong>
+      </div>
+    </section>
 
-  <section class="events">
-    <h2>Next Parades & Big Shows</h2>
-    <div id="paradeEventsList">
-      <div class="event-card">
+    <section class="home-section">
+      <div class="section-heading">
         <div>
-          <h3>Loading events...</h3>
-          <p>Checking upcoming parade times</p>
+          <span class="section-kicker">Jump To A Park</span>
+          <h2>Open the park you need right now</h2>
         </div>
-        <span class="event-time">...</span>
       </div>
-    </div>
-  </section>
+      <div class="park-shortcuts-grid">
+        <a class="park-shortcut-card wdw" href="/pages/wdw.html">
+          <span class="park-shortcut-icon"><i class="fa fa-magic"></i></span>
+          <span class="park-shortcut-name">Walt Disney World</span>
+          <span class="park-shortcut-note">Magic Kingdom, EPCOT, Hollywood Studios, Animal Kingdom</span>
+        </a>
+        <a class="park-shortcut-card disneyland" href="/pages/disneyland.html">
+          <span class="park-shortcut-icon"><i class="fa fa-star"></i></span>
+          <span class="park-shortcut-name">Disneyland Resort</span>
+          <span class="park-shortcut-note">Disneyland Park and California Adventure</span>
+        </a>
+        <a class="park-shortcut-card orlando" href="/pages/universalorlando.html">
+          <span class="park-shortcut-icon"><i class="fa fa-globe"></i></span>
+          <span class="park-shortcut-name">Universal Orlando</span>
+          <span class="park-shortcut-note">Studios Florida, Islands, Epic Universe, Volcano Bay</span>
+        </a>
+        <a class="park-shortcut-card hollywood" href="/pages/universalHollywood.html">
+          <span class="park-shortcut-icon"><i class="fa fa-film"></i></span>
+          <span class="park-shortcut-name">Universal Hollywood</span>
+          <span class="park-shortcut-note">Quick access to current rides and show times</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="home-section">
+      <div class="section-heading">
+        <div>
+          <span class="section-kicker">Best Ride Picks</span>
+          <h2>Lowest waits across all parks</h2>
+        </div>
+        <p>These are the easiest rides to jump on right now.</p>
+      </div>
+      <div class="attractions" id="lowestWaitsList">
+        <div class="attraction-card">
+          <div>
+            <h3>Loading rides...</h3>
+            <p>Pulling current waits from all parks</p>
+          </div>
+          <span class="wait">...</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="home-section">
+      <div class="section-heading">
+        <div>
+          <span class="section-kicker">Entertainment</span>
+          <h2>Next parades and big shows</h2>
+        </div>
+        <p>Catch the next parade, fireworks, or nighttime spectacular without digging through every park page.</p>
+      </div>
+      <div class="events" id="paradeEventsList">
+        <div class="event-card">
+          <div>
+            <h3>Loading events...</h3>
+            <p>Checking upcoming parade times</p>
+          </div>
+          <span class="event-time">...</span>
+        </div>
+      </div>
+    </section>
+  </main>
 
   <div id="footer-placeholder"></div>
   <script src="assets/js/navigation.js"></script>
