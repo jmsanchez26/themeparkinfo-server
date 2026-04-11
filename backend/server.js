@@ -140,6 +140,33 @@ function buildAggregatedMessage(alerts) {
   };
 }
 
+function evaluateAlert(alert) {
+  const cachedData = cache[alert.park]?.data;
+  const match = cachedData?.liveData?.find(item => item.name === alert.name);
+
+  if (!match) {
+    return {
+      status: "Unknown",
+      currentWait: null,
+      isTriggered: false
+    };
+  }
+
+  const status = match.status || "Unknown";
+  const currentWait = match.queue?.STANDBY?.waitTime ?? null;
+  const statusLower = String(status).toLowerCase();
+  const isTriggered =
+    (statusLower === "operating" && typeof currentWait === "number" && currentWait <= alert.waitTime) ||
+    (statusLower && statusLower !== "operating");
+
+  return {
+    status,
+    currentWait,
+    isTriggered,
+    isDown: Boolean(statusLower) && statusLower !== "operating"
+  };
+}
+
 function findTriggeredAlertsForPark(park) {
   const cachedData = cache[park]?.data;
   if (!cachedData?.liveData) return [];
@@ -150,20 +177,12 @@ function findTriggeredAlertsForPark(park) {
   const triggered = [];
 
   parkAlerts.forEach(alert => {
-    const match = cachedData.liveData.find(item => item.name === alert.name);
-    if (!match) return;
+    const evaluatedAlert = evaluateAlert(alert);
 
-    const statusLower = String(match.status || "").toLowerCase();
-    const currentWait = match.queue?.STANDBY?.waitTime;
-    const hasWait = typeof currentWait === "number";
-    const isDown = Boolean(statusLower) && statusLower !== "operating";
-
-    if ((statusLower === "operating" && hasWait && currentWait <= alert.waitTime) || isDown) {
+    if (evaluatedAlert.isTriggered && !alert.triggeredAt) {
       triggered.push({
         ...alert,
-        currentWait,
-        status: match.status,
-        isDown
+        ...evaluatedAlert
       });
     }
   });
@@ -172,22 +191,32 @@ function findTriggeredAlertsForPark(park) {
 }
 
 function buildAlertSnapshot(alert) {
-  const cachedData = cache[alert.park]?.data;
-  const match = cachedData?.liveData?.find(item => item.name === alert.name);
-  const status = match?.status || "Unknown";
-  const currentWait = match?.queue?.STANDBY?.waitTime ?? null;
-  const statusLower = String(status).toLowerCase();
-  const isTriggered =
-    (statusLower === "operating" && typeof currentWait === "number" && currentWait <= alert.waitTime) ||
-    (statusLower && statusLower !== "operating");
+  const evaluatedAlert = evaluateAlert(alert);
 
   return {
     ...alert,
-    status,
-    currentWait,
-    isTriggered,
+    status: evaluatedAlert.status,
+    currentWait: evaluatedAlert.currentWait,
+    isTriggered: evaluatedAlert.isTriggered,
     lastUpdated: cache[alert.park]?.lastUpdated || null
   };
+}
+
+function reconcileTriggeredStateForPark(park) {
+  let changed = false;
+
+  pushState.alerts.forEach(alert => {
+    if (alert.park !== park) return;
+
+    const evaluatedAlert = evaluateAlert(alert);
+
+    if (!evaluatedAlert.isTriggered && alert.triggeredAt) {
+      delete alert.triggeredAt;
+      changed = true;
+    }
+  });
+
+  return changed;
 }
 
 async function sendTriggeredNotifications(triggeredAlerts) {
@@ -247,12 +276,25 @@ async function sendTriggeredNotifications(triggeredAlerts) {
 
   if (!deliveredAlertIds.size && !invalidTokens.size) return;
 
+  let changed = false;
+
   pushState.alerts = pushState.alerts.filter(alert => {
-    if (invalidTokens.has(alert.deviceToken)) return false;
-    return !deliveredAlertIds.has(alert.id);
+    if (invalidTokens.has(alert.deviceToken)) {
+      changed = true;
+      return false;
+    }
+
+    if (deliveredAlertIds.has(alert.id)) {
+      alert.triggeredAt = new Date().toISOString();
+      changed = true;
+    }
+
+    return true;
   });
 
-  await persistAlerts();
+  if (changed) {
+    await persistAlerts();
+  }
 }
 
 async function processTriggeredAlertsForPark(park) {
@@ -287,6 +329,9 @@ async function updateCache() {
 
         console.log(`${park} updated at ${cache[park].lastUpdated.toISOString()}`);
         await processTriggeredAlertsForPark(park);
+        if (reconcileTriggeredStateForPark(park)) {
+          await persistAlerts();
+        }
       } catch (error) {
         console.error(`Error updating ${park}:`, error.message);
         cache[park].error = error.message;
@@ -326,6 +371,7 @@ app.post("/api/alerts", async (req, res) => {
   if (existingAlert) {
     existingAlert.waitTime = waitTime;
     existingAlert.updatedAt = new Date().toISOString();
+    delete existingAlert.triggeredAt;
   } else {
     pushState.alerts.push({
       id: randomUUID(),
@@ -348,8 +394,17 @@ app.post("/api/alerts", async (req, res) => {
 app.get("/api/alerts", (req, res) => {
   const alerts = pushState.alerts
     .map(buildAlertSnapshot)
-    .filter(alert => !alert.isTriggered)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => {
+      if (a.isTriggered !== b.isTriggered) {
+        return a.isTriggered ? -1 : 1;
+      }
+
+      if (a.triggeredAt && b.triggeredAt) {
+        return new Date(b.triggeredAt).getTime() - new Date(a.triggeredAt).getTime();
+      }
+
+      return a.name.localeCompare(b.name);
+    });
 
   res.json({
     data: alerts

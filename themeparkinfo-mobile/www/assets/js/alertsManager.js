@@ -27,6 +27,15 @@
     return parsed.toLocaleString();
   }
 
+  function formatTriggered(triggeredAt) {
+    if (!triggeredAt) return "Not triggered yet";
+
+    const parsed = new Date(triggeredAt);
+    if (Number.isNaN(parsed.getTime())) return "Triggered recently";
+
+    return parsed.toLocaleString();
+  }
+
   function scheduleRefresh(delayMs = 15000) {
     clearTimeout(alertsRefreshTimerId);
     alertsRefreshTimerId = setTimeout(() => {
@@ -71,17 +80,18 @@
 
       const payload = await response.json();
       const alerts = Array.isArray(payload.data) ? payload.data : [];
+      const triggeredCount = alerts.filter(alert => alert.isTriggered).length;
 
       renderAlerts(alerts);
       status.textContent = alerts.length
-        ? `${alerts.length} active alert${alerts.length === 1 ? "" : "s"}`
-        : "No active alerts right now.";
+        ? `${alerts.length} saved alert${alerts.length === 1 ? "" : "s"}${triggeredCount ? `, ${triggeredCount} already hit` : ""}`
+        : "No wait time alerts saved yet.";
       scheduleRefresh();
     } catch (error) {
       console.error("Alerts load failed:", error);
       list.innerHTML = `
         <div class="alerts-empty">
-          Could not load active alerts right now. Please try again.
+          Could not load your alerts right now. Please try again.
         </div>
       `;
       status.textContent = error.message;
@@ -95,21 +105,21 @@
     if (!alerts.length) {
       list.innerHTML = `
         <div class="alerts-empty">
-          No active wait time alerts have been saved yet.
+          No wait time alerts have been saved yet.
         </div>
       `;
       return;
     }
 
     list.innerHTML = alerts.map(alert => `
-      <article class="alert-manager-card" data-alert-id="${alert.id}">
+      <article class="alert-manager-card ${alert.isTriggered ? "is-hit" : ""}" data-alert-id="${alert.id}">
         <div class="alert-manager-head">
           <div>
             <h3>${alert.name}</h3>
             <div class="alert-manager-meta">
               <span class="alert-chip park">${formatParkName(alert.park)}</span>
               <span class="alert-chip ${alert.isTriggered ? "live" : "pending"}">
-                ${alert.isTriggered ? "Triggered now" : "Waiting"}
+                ${alert.isTriggered ? "Alert hit" : "Watching"}
               </span>
               <span class="alert-chip status">${alert.status || "Unknown"}</span>
             </div>
@@ -127,14 +137,20 @@
               <span class="alert-stat-value">${formatWait(alert.currentWait)}</span>
             </div>
             <div class="alert-stat">
-              <span class="alert-stat-label">Last refresh</span>
-              <span class="alert-stat-value">${formatUpdated(alert.lastUpdated)}</span>
+              <span class="alert-stat-label">${alert.isTriggered ? "Alert hit" : "Last refresh"}</span>
+              <span class="alert-stat-value">${alert.isTriggered ? formatTriggered(alert.triggeredAt) : formatUpdated(alert.lastUpdated)}</span>
             </div>
           </div>
 
+          ${alert.isTriggered ? `
+            <div class="alert-hit-banner">
+              This alert was already hit. It stays here until you update it or delete it.
+            </div>
+          ` : ""}
+
           <div class="alert-manager-actions">
             <div class="alert-input-group">
-              <label for="wait-${alert.id}">Update threshold</label>
+              <label for="wait-${alert.id}">${alert.isTriggered ? "Set a new threshold" : "Update threshold"}</label>
               <input id="wait-${alert.id}" type="number" min="0" value="${alert.waitTime}" />
             </div>
             <button class="alert-action-btn update" data-action="update">Update</button>
