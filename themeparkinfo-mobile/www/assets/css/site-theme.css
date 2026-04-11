@@ -64,6 +64,10 @@ a {
   font-size: 0.9rem;
 }
 
+.quick-actions button i {
+  margin-right: 6px;
+}
+
 /* Featured */
 .featured {
   padding: 0 16px 16px;
@@ -79,11 +83,17 @@ a {
 .featured-card .tag {
   font-size: 0.75rem;
   opacity: 0.9;
+  display: inline-block;
+  margin-bottom: 10px;
 }
 
 /* Attractions */
 .attractions {
   padding: 0 16px 80px;
+}
+
+.events {
+  padding: 0 16px 100px;
 }
 
 .attraction-card {
@@ -118,6 +128,55 @@ a {
 
 .wait.high {
   color: #dc2626;
+}
+
+.park-label,
+.event-park {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #1d4ed8;
+  background: #dbeafe;
+  border-radius: 999px;
+  padding: 4px 8px;
+}
+
+.event-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  background: var(--card);
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+}
+
+.event-card h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.event-card p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.event-time {
+  flex-shrink: 0;
+  font-weight: 700;
+  color: #7c3aed;
+}
+
+.empty-state {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 16px;
+  color: var(--muted);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
 }
 
 /* Bottom Nav */

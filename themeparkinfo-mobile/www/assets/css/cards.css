@@ -182,11 +182,11 @@
 }
 
 .favoriteRideBtn {
-  width: 38px;
-  height: 38px;
+  width: auto;
+  height: auto;
   border: none;
-  border-radius: 999px;
-  background: #eff6ff;
+  border-radius: 0;
+  background: transparent;
   color: #94a3b8;
   cursor: pointer;
   display: inline-flex;
@@ -194,6 +194,7 @@
   justify-content: center;
   flex-shrink: 0;
   transition: all 0.2s ease;
+  padding: 0;
 }
 
 .favoriteRideBtn i {
@@ -201,12 +202,10 @@
 }
 
 .favoriteRideBtn:hover {
-  background: #dbeafe;
   color: #f59e0b;
 }
 
 .favoriteRideBtn.active {
-  background: #fef3c7;
   color: #f59e0b;
 }
 
