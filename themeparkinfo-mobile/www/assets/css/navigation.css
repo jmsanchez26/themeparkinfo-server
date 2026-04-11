@@ -10,14 +10,17 @@ body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   background: #f7f9fc;
   color: #1f2937;
+  padding-top: 56px;
 }
 
 /* =========================
    Mobile Header
 ========================= */
 .mobile-header {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 40;
   height: 56px;
   display: flex;

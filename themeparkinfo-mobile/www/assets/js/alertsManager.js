@@ -115,12 +115,14 @@
       <article class="alert-manager-card ${alert.isTriggered ? "is-hit" : ""}" data-alert-id="${alert.id}">
         <div class="alert-manager-head">
           <div>
-            <h3>${alert.name}</h3>
-            <div class="alert-manager-meta">
-              <span class="alert-chip park">${formatParkName(alert.park)}</span>
+            <div class="alert-title-row">
+              <h3>${alert.name}</h3>
               <span class="alert-chip ${alert.isTriggered ? "live" : "pending"}">
                 ${alert.isTriggered ? "Alert hit" : "Watching"}
               </span>
+            </div>
+            <div class="alert-manager-meta">
+              <span class="alert-chip park">${formatParkName(alert.park)}</span>
               <span class="alert-chip status">${alert.status || "Unknown"}</span>
             </div>
           </div>

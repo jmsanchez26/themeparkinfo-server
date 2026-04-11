@@ -76,11 +76,22 @@
   font-size: 1.05rem;
 }
 
+.alert-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.alert-title-row h3 {
+  margin: 0;
+}
+
 .alert-manager-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .alert-chip {
