@@ -188,30 +188,58 @@ a {
 }
 
 .park-shortcut-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 250px;
   text-decoration: none;
-  background: #ffffff;
   border-radius: 22px;
   padding: 18px;
   box-shadow: 0 14px 28px rgba(15, 23, 42, 0.07);
   display: grid;
-  gap: 10px;
   border: 1px solid rgba(148, 163, 184, 0.14);
+  color: #ffffff;
+  background-position: center;
+  background-size: cover;
 }
 
 .park-shortcut-card.wdw {
-  background: linear-gradient(135deg, #eef2ff, #dbeafe);
+  background-image:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.14), rgba(37, 99, 235, 0.28)),
+    url("https://upload.wikimedia.org/wikipedia/commons/3/3b/Magic_Kingdom_castle.png");
 }
 
 .park-shortcut-card.disneyland {
-  background: linear-gradient(135deg, #fff7ed, #fef3c7);
+  background-image:
+    linear-gradient(135deg, rgba(17, 24, 39, 0.16), rgba(245, 158, 11, 0.24)),
+    url("https://upload.wikimedia.org/wikipedia/commons/c/c0/SleepingBeautyCastle.JPG");
 }
 
 .park-shortcut-card.orlando {
-  background: linear-gradient(135deg, #ecfeff, #dbeafe);
+  background-image:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.18), rgba(8, 145, 178, 0.24)),
+    url("https://upload.wikimedia.org/wikipedia/commons/4/4d/UniversalStudiosFloridaEntrance.JPG");
 }
 
 .park-shortcut-card.hollywood {
-  background: linear-gradient(135deg, #fff1f2, #fee2e2);
+  background-image:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.22), rgba(239, 68, 68, 0.24)),
+    url("https://upload.wikimedia.org/wikipedia/commons/5/56/Universal_Studios_Hollywood_Entrance_%282570304287%29.jpg");
+}
+
+.park-shortcut-overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.15) 0%, rgba(15, 23, 42, 0.78) 100%);
+}
+
+.park-shortcut-content {
+  position: relative;
+  z-index: 1;
+  min-height: 100%;
+  display: grid;
+  align-content: end;
+  gap: 10px;
 }
 
 .park-shortcut-icon {
@@ -221,20 +249,61 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.9);
   color: #2563eb;
   font-size: 1.2rem;
 }
 
 .park-shortcut-name {
   font-weight: 800;
-  font-size: 1rem;
+  font-size: 1.05rem;
+  text-shadow: 0 2px 12px rgba(15, 23, 42, 0.3);
 }
 
 .park-shortcut-note {
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.92);
   font-size: 0.84rem;
   line-height: 1.45;
+  text-shadow: 0 2px 12px rgba(15, 23, 42, 0.34);
+}
+
+.park-hours-stack {
+  display: grid;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.park-hours-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.96);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+  backdrop-filter: blur(4px);
+}
+
+.park-hours-line.primary {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.park-hours-line.empty {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.park-shortcuts-credit {
+  margin: 2px 2px 0;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.park-shortcuts-credit a {
+  color: #2563eb;
+  font-weight: 700;
 }
 
 .attractions,
@@ -442,6 +511,10 @@ a {
 
   .park-shortcuts-grid {
     grid-template-columns: 1fr;
+  }
+
+  .park-shortcut-card {
+    min-height: 220px;
   }
 
   .section-heading {

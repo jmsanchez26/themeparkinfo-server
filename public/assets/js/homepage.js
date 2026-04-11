@@ -22,6 +22,28 @@
   };
 
   const eventKeywords = ["parade", "cavalcade", "fireworks", "fantasmic", "nighttime", "spectacular"];
+  const homepageHoursCards = [
+    {
+      key: "wdw",
+      scheduleId: "75ea578a-adc8-4116-a54d-dccb60765ef9",
+      timezone: "America/New_York"
+    },
+    {
+      key: "disneyland",
+      scheduleId: "7340550b-c14d-4def-80bb-acdb51d49a66",
+      timezone: "America/Los_Angeles"
+    },
+    {
+      key: "usf",
+      scheduleId: "eb3f4560-2383-4a36-9152-6b3e5ed6bc57",
+      timezone: "America/New_York"
+    },
+    {
+      key: "ush",
+      scheduleId: "bc4005c5-8c7e-41d7-b349-cdddf1796427",
+      timezone: "America/Los_Angeles"
+    }
+  ];
 
   function formatParkLabel(parkId, resortLabel) {
     return parkNames[parkId] || resortLabel;
@@ -35,6 +57,93 @@
       hour: "numeric",
       minute: "2-digit"
     });
+  }
+
+  function formatTimeInZone(isoString, timezone) {
+    const parsed = new Date(isoString);
+    if (Number.isNaN(parsed.getTime())) return "TBD";
+
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: timezone
+    }).format(parsed);
+  }
+
+  function getDateKeyInTimezone(date, timezone) {
+    return new Intl.DateTimeFormat("en-CA", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      timeZone: timezone
+    }).format(date);
+  }
+
+  function buildHoursLine(prefix, entry, timezone, emptyMessage) {
+    if (!entry?.openingTime || !entry?.closingTime) {
+      return emptyMessage;
+    }
+
+    return `${prefix}: ${formatTimeInZone(entry.openingTime, timezone)} - ${formatTimeInZone(entry.closingTime, timezone)}`;
+  }
+
+  function setHoursCardState(key, lines) {
+    const container = document.querySelector(`[data-hours-card="${key}"]`);
+    if (!container) return;
+
+    container.innerHTML = lines.map((line, index) => `
+      <span class="park-hours-line ${index === 0 ? "primary" : ""} ${line.empty ? "empty" : ""}">${line.text}</span>
+    `).join("");
+  }
+
+  async function loadParkHoursCards() {
+    const today = new Date();
+
+    await Promise.all(
+      homepageHoursCards.map(async card => {
+        try {
+          const response = await fetch(`https://api.themeparks.wiki/v1/entity/${card.scheduleId}/schedule`, {
+            cache: "no-store"
+          });
+
+          if (!response.ok) {
+            throw new Error(`Could not load schedule for ${card.key}`);
+          }
+
+          const payload = await response.json();
+          const dateKey = getDateKeyInTimezone(today, card.timezone);
+          const todaySchedule = Array.isArray(payload?.schedule)
+            ? payload.schedule.find(entry => entry.date === dateKey)
+            : null;
+          const entries = Array.isArray(todaySchedule?.openingHours) ? todaySchedule.openingHours : [];
+          const operating = entries.find(entry => String(entry.type || "").toUpperCase() === "OPERATING");
+          const earlyEntry = entries.find(entry => {
+            const type = String(entry.type || "").toUpperCase();
+            const description = String(entry.description || "").toLowerCase();
+            return type === "TICKETED_EVENT" && description.includes("early");
+          });
+          const extendedHours = entries.find(entry => {
+            const type = String(entry.type || "").toUpperCase();
+            const description = String(entry.description || "").toLowerCase();
+            return type === "TICKETED_EVENT" && description.includes("extended");
+          });
+
+          setHoursCardState(card.key, [
+            { text: buildHoursLine("Open", operating, card.timezone, "Open hours not posted yet"), empty: !operating },
+            { text: buildHoursLine("Early entry", earlyEntry, card.timezone, "No early entry today"), empty: !earlyEntry },
+            { text: buildHoursLine("Extended hours", extendedHours, card.timezone, "No extended hours today"), empty: !extendedHours }
+          ]);
+        } catch (error) {
+          console.error(`Homepage schedule failed for ${card.key}:`, error);
+          setHoursCardState(card.key, [
+            { text: "Hours are not available right now", empty: true },
+            { text: "Early entry will show here", empty: true },
+            { text: "Extended hours will show here", empty: true }
+          ]);
+        }
+      })
+    );
   }
 
   function renderFeaturedRide(ride) {
@@ -144,6 +253,10 @@
   }
 
   async function loadHomepageData() {
+    loadParkHoursCards().catch(error => {
+      console.error("Homepage schedule cards failed:", error);
+    });
+
     try {
       const results = await Promise.all(
         endpoints.map(async endpoint => {
