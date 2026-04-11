@@ -1,6 +1,8 @@
 
 let waitTimeAlerts = JSON.parse(localStorage.getItem("waitTimeAlerts"));
 if (!Array.isArray(waitTimeAlerts)) waitTimeAlerts = [];
+let favoriteRideKeys = JSON.parse(localStorage.getItem("favoriteRideKeys"));
+if (!Array.isArray(favoriteRideKeys)) favoriteRideKeys = [];
 let parkDataRequestInFlight = false;
 let parkDataRetryTimeoutId = null;
 
@@ -9,6 +11,30 @@ let parkDataRetryTimeoutId = null;
  *************************/
 function logSavedAlerts(context) {
   console.log(`Saved Alerts (${context}):`, waitTimeAlerts);
+}
+
+function buildFavoriteRideKey(park, item) {
+  return `${park}::${item.id || item.name}`;
+}
+
+function isFavoriteRide(park, item) {
+  return favoriteRideKeys.includes(buildFavoriteRideKey(park, item));
+}
+
+function persistFavoriteRides() {
+  localStorage.setItem("favoriteRideKeys", JSON.stringify(favoriteRideKeys));
+}
+
+function toggleFavoriteRide(park, item) {
+  const rideKey = buildFavoriteRideKey(park, item);
+
+  if (favoriteRideKeys.includes(rideKey)) {
+    favoriteRideKeys = favoriteRideKeys.filter(key => key !== rideKey);
+  } else {
+    favoriteRideKeys.push(rideKey);
+  }
+
+  persistFavoriteRides();
 }
 
 /*************************
@@ -233,9 +259,22 @@ function renderCards(park, type, selector) {
   const container = document.querySelector(selector);
   if (!container) return;
   container.innerHTML = "";
-  //console.log(parks[park][type]);
+  const items = [...parks[park][type]];
 
-  parks[park][type].forEach(item => {
+  if (type === "rides") {
+    items.sort((a, b) => {
+      const aFavorite = isFavoriteRide(park, a) ? 1 : 0;
+      const bFavorite = isFavoriteRide(park, b) ? 1 : 0;
+
+      if (aFavorite !== bFavorite) {
+        return bFavorite - aFavorite;
+      }
+
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  items.forEach(item => {
     const statusLower = item.status?.toLowerCase();
     const hasWait = typeof item.waitTime === "number";
     const rideNow = item.rideNow;
@@ -245,6 +284,7 @@ function renderCards(park, type, selector) {
     const waitWillDrop = item.waitDopBool;
     const paidLLPriceVal = item.paidLL;
     const nextShowTime = item.nextShowTime;
+    const isFavorite = type === "rides" && isFavoriteRide(park, item);
     let waitForecastIcon = '';
     card.className = "wait-card";
     if (statusLower === "operating" && hasWait && rideNow !== null) {
@@ -256,6 +296,11 @@ function renderCards(park, type, selector) {
     card.innerHTML = `
       <div class="card-title">
         <h3>${waitForecastIcon} ${item.name}</h3>
+        ${type === "rides" ? `
+          <button class="favoriteRideBtn ${isFavorite ? "active" : ""}" type="button" aria-label="${isFavorite ? "Remove from favorites" : "Add to favorites"}">
+            <i class="fa fa-star"></i>
+          </button>
+        ` : ""}
       </div>
       <div class="wait-card-inner">
         <div class="card-left">
@@ -318,6 +363,13 @@ function renderCards(park, type, selector) {
     if (statusLower === "operating" && hasWait) {
       card.querySelector(".waitTimeRemBtn").addEventListener("click", () => {
         openSetAlertModal(item);
+      });
+    }
+
+    if (type === "rides") {
+      card.querySelector(".favoriteRideBtn")?.addEventListener("click", () => {
+        toggleFavoriteRide(park, item);
+        renderAll();
       });
     }
 
