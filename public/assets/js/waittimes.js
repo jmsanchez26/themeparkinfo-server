@@ -229,7 +229,6 @@ if (!futureForecast.length) {
   return [goodToRide, waitWillDrop, lowestWait, avgWaitTime];
 }
 
-
 function renderCards(park, type, selector) {
   const container = document.querySelector(selector);
   if (!container) return;

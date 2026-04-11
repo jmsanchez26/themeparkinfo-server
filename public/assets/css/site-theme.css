@@ -188,6 +188,26 @@ a {
   color: #2563eb;
 }
 
+.footer-icon-wdw {
+  color: #7c3aed;
+}
+
+.footer-icon-disneyland {
+  color: #f59e0b;
+}
+
+.footer-icon-ush {
+  color: #ef4444;
+}
+
+.footer-icon-usf {
+  color: #0ea5e9;
+}
+
+.footer-icon-alerts {
+  color: #22c55e;
+}
+
 .footer-shortcut span {
   font-size: 0.72rem;
   line-height: 1.2;

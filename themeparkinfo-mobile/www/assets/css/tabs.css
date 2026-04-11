@@ -47,31 +47,55 @@
 ========================= */
 .sub-tabs {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   justify-content: center;
   margin-bottom: 16px;
+  padding: 0 16px;
+  overflow-x: auto;
 }
 
 .sub-tab {
-  padding: 12px 14px;
-  border-radius: 5px;
-  border: 1px solid var(--border);
-  background: #fff;
-  font-size: 14px;
+  flex: 0 0 auto;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: var(--primary);
+  font-size: 0.9rem;
   font-weight: 600;
-  color: var(--muted);
+  color: #fff;
   cursor: pointer;
   transition: all 0.2s ease;
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.14);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .sub-tab:hover {
-  background: var(--hover);
+  background: #2563eb;
 }
 
 .sub-tab.active {
-  background: var(--primary);
-  color: #fff;
-  border-color: var(--primary);
+  background: #ffffff;
+  color: var(--primary);
+  border-color: rgba(59, 130, 246, 0.28);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+}
+
+.sub-tab i {
+  font-size: 0.95rem;
+}
+
+.sub-tab .rides-icon {
+  color: #f59e0b;
+}
+
+.sub-tab .shows-icon {
+  color: #a855f7;
+}
+
+.sub-tab .dining-icon {
+  color: #22c55e;
 }
 
 /* =========================
