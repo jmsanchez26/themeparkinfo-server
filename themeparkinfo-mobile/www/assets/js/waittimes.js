@@ -322,79 +322,120 @@ function renderCards(park, type, selector) {
     const nextShowTime = item.nextShowTime;
     const isFavorite = type === "rides" && isFavoriteRide(park, item);
     let waitForecastIcon = '';
-    card.className = "wait-card";
+    card.className = type === "rides" ? "wait-card wait-card-modern" : "wait-card";
     if (statusLower === "operating" && hasWait && rideNow !== null) {
       waitForecastIcon = rideNow === true
       ? '<i class="fa fa-thumbs-up"></i>'
       : '<i class="fa fa-hand-paper-o"></i>';
     }
 
-    card.innerHTML = `
-      <div class="card-title">
-        <h3>${waitForecastIcon} ${item.name}</h3>
-        ${type === "rides" ? `
-          <button class="favoriteRideBtn ${isFavorite ? "active" : ""}" type="button" aria-label="${isFavorite ? "Remove from favorites" : "Add to favorites"}">
-            <i class="fa fa-star"></i>
-          </button>
-        ` : ""}
-      </div>
-      <div class="wait-card-inner">
-        <div class="card-left">
-          <span class="status ${statusLower === "operating" ? "active" : "inactive"}">
-            ${item.status}
+    card.innerHTML = type === "rides"
+      ? `
+        <div class="saved-alert-head wait-card-head">
+          <div class="saved-alert-title-row wait-card-title-row">
+            <h3>${waitForecastIcon} ${item.name}</h3>
+            <button class="favoriteRideBtn ${isFavorite ? "active" : ""}" type="button" aria-label="${isFavorite ? "Remove from favorites" : "Add to favorites"}">
+              <i class="fa fa-star"></i>
+            </button>
+          </div>
+          <span class="saved-alert-chip ${statusLower === "operating" ? "watching" : "hit"}">
+            ${item.status || "Unknown"}
           </span>
         </div>
-        <div class="card-middle">
-            <div class="wait-time">
-              <div class="currentWait">
-                ${statusLower === "operating" && hasWait 
-                  ? `<i class="fa fa-clock-o"></i> ${item.waitTime} min` 
-                  : (item.nextShowTime && statusLower === "operating"? `<i class="fa fa-calendar-check-o"></i> ${item.nextShowTime}` : "")
-                }
-              </div>              
-              ${statusLower === "operating" && hasWait && nextLLTime
-                ? `<div class="nextLL">
-                    <i class="fa fa-bolt" aria-hidden="true"></i>
-                    ${nextLLTime}
-                    ${paidLLPriceVal ? `<br> ${paidLLPriceVal}` : ""}
-                  </div>`
-                : ""}              
+
+        <div class="saved-alert-stats wait-card-stats">
+          <div class="saved-alert-stat">
+            <span class="saved-alert-stat-label">Current wait</span>
+            <span class="saved-alert-stat-value">
+              ${statusLower === "operating" && hasWait ? `${item.waitTime} min` : "No posted wait"}
+            </span>
+          </div>
+          ${
+            nextLLTime
+              ? `<div class="saved-alert-stat">
+                  <span class="saved-alert-stat-label">LL</span>
+                  <span class="saved-alert-stat-value">${nextLLTime}</span>
+                  ${paidLLPriceVal ? `<span class="saved-alert-stat-subvalue">${paidLLPriceVal}</span>` : ""}
+                </div>`
+              : ``
+          }
         </div>
-        </div>
-        <div class="card-right">
+
+        ${
+          statusLower === "operating" &&
+          hasWait &&
+          waitWillDrop === true &&
+          rideAverageWaitTime !== null
+            ? `
+              <div class="wait-card-addInfo wait-card-addInfo-modern">
+                <div class="addInfo-header">
+                  <span>Wait Insights</span>
+                  <i class="fa fa-chevron-down"></i>
+                </div>
+
+                <div class="addInfo-content">
+                  <div class="avgWait">
+                    Average wait today: ${rideAverageWaitTime} min
+                  </div>
+
+                  <div class="dropNotice">
+                    Expected to drop even more within the next 2 hours
+                  </div>
+                </div>
+              </div>
+            `
+            : ""
+        }
+
+        <div class="wait-card-footer">
           ${
             statusLower === "operating" && hasWait
               ? `<button class="waitTimeRemBtn"><i class="fa fa-bell"></i> Set Alert</button>`
               : ""
           }
         </div>
-      </div>
-      ${
-        statusLower === "operating" &&
-        hasWait &&
-        waitWillDrop === true &&
-        rideAverageWaitTime !== null
-          ? `
-            <div class="wait-card-addInfo">
-              <div class="addInfo-header">
-                <span>Wait Insights</span>
-                <i class="fa fa-chevron-down"></i>
-              </div>
-
-              <div class="addInfo-content">
-                <div class="avgWait">
-                  Average wait today: ${rideAverageWaitTime} min
-                </div>
-
-                <div class="dropNotice">
-                  Expected to drop even more within the next 2 hours
-                </div>
-              </div>
-            </div>
-          `
-          : ""
-      }
-    `;
+      `
+      : `
+        <div class="card-title">
+          <h3>${waitForecastIcon} ${item.name}</h3>
+          ${type === "rides" ? `
+            <button class="favoriteRideBtn ${isFavorite ? "active" : ""}" type="button" aria-label="${isFavorite ? "Remove from favorites" : "Add to favorites"}">
+              <i class="fa fa-star"></i>
+            </button>
+          ` : ""}
+        </div>
+        <div class="wait-card-inner">
+          <div class="card-left">
+            <span class="status ${statusLower === "operating" ? "active" : "inactive"}">
+              ${item.status}
+            </span>
+          </div>
+          <div class="card-middle">
+              <div class="wait-time">
+                <div class="currentWait">
+                  ${statusLower === "operating" && hasWait 
+                    ? `<i class="fa fa-clock-o"></i> ${item.waitTime} min` 
+                    : (item.nextShowTime && statusLower === "operating"? `<i class="fa fa-calendar-check-o"></i> ${item.nextShowTime}` : "")
+                  }
+                </div>              
+                ${statusLower === "operating" && hasWait && nextLLTime
+                  ? `<div class="nextLL">
+                      <i class="fa fa-bolt" aria-hidden="true"></i>
+                      ${nextLLTime}
+                      ${paidLLPriceVal ? `<br> ${paidLLPriceVal}` : ""}
+                    </div>`
+                  : ""}              
+          </div>
+          </div>
+          <div class="card-right">
+            ${
+              statusLower === "operating" && hasWait
+                ? `<button class="waitTimeRemBtn"><i class="fa fa-bell"></i> Set Alert</button>`
+                : ""
+            }
+          </div>
+        </div>
+      `;
 
     if (statusLower === "operating" && hasWait) {
       card.querySelector(".waitTimeRemBtn").addEventListener("click", () => {

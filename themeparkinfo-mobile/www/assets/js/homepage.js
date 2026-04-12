@@ -48,6 +48,19 @@
       mode: "universal"
     }
   ];
+  const favoriteRideDestinations = {
+    "Magic Kingdom": { path: "/pages/wdw.html", park: "magic-kingdom" },
+    "EPCOT": { path: "/pages/wdw.html", park: "epcot" },
+    "Animal Kingdom": { path: "/pages/wdw.html", park: "animalKingdom" },
+    "Hollywood Studios": { path: "/pages/wdw.html", park: "hollywood" },
+    "Disneyland Park": { path: "/pages/disneyland.html", park: "disneyland" },
+    "California Adventure": { path: "/pages/disneyland.html", park: "caliadv" },
+    "Universal Studios Florida": { path: "/pages/universalorlando.html", park: "usfl" },
+    "Islands of Adventure": { path: "/pages/universalorlando.html", park: "islandofAdventure" },
+    "Epic Universe": { path: "/pages/universalorlando.html", park: "epic" },
+    "Volcano Bay": { path: "/pages/universalorlando.html", park: "volcanoBay" },
+    "Universal Studios Hollywood": { path: "/pages/universalHollywood.html", park: "usHollywood" }
+  };
 
   function formatParkLabel(parkId, resortLabel) {
     return parkNames[parkId] || resortLabel;
@@ -65,6 +78,26 @@
 
   function formatWait(waitTime) {
     return typeof waitTime === "number" ? `${waitTime} min` : "N/A";
+  }
+
+  function formatLLTime(isoTime) {
+    if (!isoTime || typeof isoTime !== "string" || !isoTime.includes("T")) return null;
+
+    let [hours, minutes] = isoTime.split("T")[1].split(":");
+    hours = Number(hours);
+    if (Number.isNaN(hours)) return null;
+
+    const suffix = hours >= 12 ? "PM" : "AM";
+    hours = (hours % 12) || 12;
+
+    return `${hours}:${minutes} ${suffix}`;
+  }
+
+  function buildFavoriteRideHref(parkName) {
+    const destination = favoriteRideDestinations[parkName];
+    if (!destination) return "#";
+
+    return `${destination.path}?park=${encodeURIComponent(destination.park)}`;
   }
 
   function formatTimeInZone(isoString, timezone) {
@@ -254,7 +287,7 @@
     }
 
     container.innerHTML = rides.map(ride => `
-      <div class="saved-alert-card">
+      <a class="saved-alert-card" href="${buildFavoriteRideHref(ride.park)}">
         <div class="saved-alert-head">
           <div class="saved-alert-title-row">
             <h3>${ride.name}</h3>
@@ -276,10 +309,18 @@
           </div>
         </div>
 
+        ${ride.nextLL ? `
+          <div class="saved-alert-ll">
+            <span class="saved-alert-ll-label">LL</span>
+            <span class="saved-alert-ll-value">${ride.nextLL}</span>
+            ${ride.paidLL ? `<span class="saved-alert-ll-price">${ride.paidLL}</span>` : ""}
+          </div>
+        ` : ""}
+
         <div class="saved-alert-footer">
           Favorite ride from your park pages
         </div>
-      </div>
+      </a>
     `).join("");
   }
 
@@ -318,7 +359,17 @@
             name: item.name,
             currentWait: item.queue?.STANDBY?.waitTime,
             status: item.status || "Unknown",
-            park: formatParkLabel(item.parkId, endpoint.label)
+            park: formatParkLabel(item.parkId, endpoint.label),
+            nextLL:
+              item.queue?.PAID_RETURN_TIME?.state === "AVAILABLE"
+                ? formatLLTime(item.queue?.PAID_RETURN_TIME?.returnStart)
+                : item.queue?.RETURN_TIME?.state === "AVAILABLE"
+                  ? formatLLTime(item.queue?.RETURN_TIME?.returnStart)
+                  : null,
+            paidLL:
+              item.queue?.PAID_RETURN_TIME?.state === "AVAILABLE"
+                ? item.queue?.PAID_RETURN_TIME?.price?.formatted || null
+                : null
           }));
       })
       .filter(item => item.favoriteKeyCandidates.some(key => favoriteRideKeys.includes(key)))

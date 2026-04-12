@@ -116,6 +116,17 @@
   box-shadow: 0 1px 2px var(--shadow);
 }
 
+.wait-card-modern {
+  display: grid;
+  gap: 14px;
+  min-height: 192px;
+  background: linear-gradient(145deg, #ffffff, #f8fbff);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 20px;
+  padding: 16px;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+}
+
 .wait-card-inner {
   display: flex;
   justify-content: space-between;
@@ -146,6 +157,82 @@
 
 .wait-card .card-title h3 {
   flex: 1;
+}
+
+.wait-card-modern .card-title,
+.wait-card-modern .wait-card-inner,
+.wait-card-modern .card-left,
+.wait-card-modern .card-middle,
+.wait-card-modern .card-right {
+  display: contents;
+}
+
+.wait-card-head {
+  display: grid;
+  gap: 8px;
+}
+
+.wait-card-title-row {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.wait-card-modern h3 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.wait-card-modern .saved-alert-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.wait-card-modern .saved-alert-chip.hit {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.wait-card-modern .saved-alert-chip.watching {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.wait-card-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.wait-card-modern .saved-alert-stat {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.wait-card-modern .saved-alert-stat-label {
+  font-size: 0.73rem;
+  color: #6b7280;
+}
+
+.wait-card-modern .saved-alert-stat-value {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.wait-card-modern .saved-alert-stat-subvalue {
+  font-size: 0.78rem;
+  color: #475569;
 }
 
 /* Right side */
@@ -204,6 +291,18 @@
   background: var(--primary-hover);
 }
 
+.wait-card-footer {
+  margin-top: auto;
+}
+
+.wait-card-modern .waitTimeRemBtn {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.18);
+}
+
 .favoriteRideBtn {
   width: auto;
   height: auto;
@@ -232,6 +331,17 @@
   color: #f59e0b;
 }
 
+.wait-card-modern .favoriteRideBtn i {
+  font-size: 1.05rem;
+}
+
+.wait-card-addInfo-modern {
+  margin-top: 0;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: #ffffff;
+}
+
 /* =========================
    RESPONSIVE ADJUSTMENTS
 ========================= */
@@ -242,5 +352,11 @@
 
   .wait-card {
     padding: 18px 20px;
+  }
+}
+
+@media (max-width: 640px) {
+  .wait-card-stats {
+    grid-template-columns: 1fr;
   }
 }

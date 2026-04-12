@@ -5,19 +5,24 @@ function initParkTabs() {
   const tabs = document.querySelectorAll(".park-tab");
   const contents = document.querySelectorAll(".park-content");
 
+  function activateParkTab(target) {
+    if (!target) return;
+
+    tabs.forEach(t => t.classList.toggle("active", t.dataset.park === target));
+    contents.forEach(c => c.classList.toggle("active", c.id === target));
+    getParkHours(target);
+  }
+
   tabs.forEach(tab => {
     tab.addEventListener("click", () => {
-      const target = tab.dataset.park;
-
-      tabs.forEach(t => t.classList.remove("active"));
-      contents.forEach(c => c.classList.remove("active"));
-
-      tab.classList.add("active");
-      document.getElementById(target)?.classList.add("active");
-
-      getParkHours(target);
+      activateParkTab(tab.dataset.park);
     });
   });
+
+  const requestedPark = new URLSearchParams(window.location.search).get("park");
+  if (requestedPark && document.getElementById(requestedPark)) {
+    activateParkTab(requestedPark);
+  }
 }
 
 /*************************
