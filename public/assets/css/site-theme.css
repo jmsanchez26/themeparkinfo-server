@@ -53,10 +53,7 @@ a {
 }
 
 .hero-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
-  gap: 18px;
-  align-items: stretch;
+  display: block;
 }
 
 .hero-copy {
@@ -93,64 +90,6 @@ a {
   max-width: 52ch;
   color: rgba(255, 255, 255, 0.88);
   line-height: 1.55;
-}
-
-.hero-actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 20px;
-}
-
-.hero-action {
-  text-decoration: none;
-  border-radius: 999px;
-  padding: 12px 18px;
-  font-weight: 700;
-}
-
-.hero-action.primary {
-  background: #ffffff;
-  color: #1d4ed8;
-}
-
-.hero-action.secondary {
-  background: rgba(255, 255, 255, 0.14);
-  color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-}
-
-.hero-highlight {
-  background: linear-gradient(135deg, #6366f1, #3b82f6);
-  color: white;
-  padding: 20px;
-  border-radius: 24px;
-  box-shadow: 0 22px 40px rgba(59, 130, 246, 0.18);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.hero-highlight .tag {
-  font-size: 0.75rem;
-  opacity: 0.92;
-  display: inline-block;
-  margin-bottom: 10px;
-}
-
-.hero-highlight h3 {
-  margin: 0 0 8px;
-  font-size: 1.3rem;
-}
-
-.hero-highlight p {
-  margin: 0;
-  color: rgba(255,255,255,0.9);
-}
-
-.hero-highlight strong {
-  margin-top: 14px;
-  font-size: 2rem;
 }
 
 .home-section {
@@ -673,12 +612,7 @@ a {
     gap: 18px;
   }
 
-  .hero-panel {
-    grid-template-columns: 1fr;
-  }
-
-  .hero-copy,
-  .hero-highlight {
+  .hero-copy {
     padding: 18px;
     border-radius: 20px;
   }
