@@ -31,21 +31,51 @@
       </div>
     </section>
 
-    <section class="home-section">
-      <div class="section-heading">
+    <section class="dashboard-shell">
+      <div class="section-heading dashboard-heading">
         <div>
-          <span class="section-kicker">Favorite Rides</span>
-          <h2>Your favorite rides</h2>
+          <span class="section-kicker">Your Dashboard</span>
+          <h2>Here is your personal dashboard</h2>
         </div>
-        <p>Quickly check the rides you starred on the park pages.</p>
+        <p>Your starred rides and saved alerts, all in one quick view.</p>
       </div>
-      <div class="saved-alerts-scroll" id="favoriteRidesList">
-        <div class="saved-alert-card empty">
-          <div>
-            <h3>Loading favorite rides...</h3>
-            <p>Checking the rides you starred on the park pages</p>
+
+      <div class="dashboard-grid">
+        <section class="home-section dashboard-panel">
+          <div class="section-heading">
+            <div>
+              <span class="section-kicker">Favorite Rides</span>
+              <h2>Your favorite rides</h2>
+            </div>
+            <p>Quickly check the rides you starred on the park pages.</p>
           </div>
-        </div>
+          <div class="saved-alerts-scroll" id="favoriteRidesList">
+            <div class="saved-alert-card empty">
+              <div>
+                <h3>Loading favorite rides...</h3>
+                <p>Checking the rides you starred on the park pages</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="home-section dashboard-panel">
+          <div class="section-heading">
+            <div>
+              <span class="section-kicker">Saved Alerts</span>
+              <h2>Your wait time alerts</h2>
+            </div>
+            <p>See what you are watching, what already hit, and the latest live wait.</p>
+          </div>
+          <div class="saved-alerts-scroll" id="savedAlertsList">
+            <div class="saved-alert-card empty">
+              <div>
+                <h3>Loading saved alerts...</h3>
+                <p>Checking your current alert settings</p>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     </section>
 

@@ -61,6 +61,7 @@
     "Volcano Bay": { path: "/pages/universalorlando.html", park: "volcanoBay" },
     "Universal Studios Hollywood": { path: "/pages/universalHollywood.html", park: "usHollywood" }
   };
+  const ALERTS_PAGE_PATH = "/pages/alerts.html";
 
   function formatParkLabel(parkId, resortLabel) {
     return parkNames[parkId] || resortLabel;
@@ -91,6 +92,35 @@
     hours = (hours % 12) || 12;
 
     return `${hours}:${minutes} ${suffix}`;
+  }
+
+  function formatTriggeredTime(isoTime) {
+    if (!isoTime) return "Not hit yet";
+
+    const parsed = new Date(isoTime);
+    if (Number.isNaN(parsed.getTime())) return "Triggered recently";
+
+    return parsed.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit"
+    });
+  }
+
+  function getStoredPushToken() {
+    try {
+      return localStorage.getItem("pushDeviceToken");
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function getLocalWaitTimeAlerts() {
+    try {
+      const alerts = JSON.parse(localStorage.getItem("waitTimeAlerts")) || [];
+      return Array.isArray(alerts) ? alerts : [];
+    } catch (error) {
+      return [];
+    }
   }
 
   function buildFavoriteRideHref(parkName) {
@@ -298,7 +328,7 @@
           <span class="saved-alert-park">${ride.park}</span>
         </div>
 
-        <div class="saved-alert-stats">
+        <div class="saved-alert-stats saved-alert-stats-alerts">
           <div class="saved-alert-stat">
             <span class="saved-alert-stat-label">Current wait</span>
             <span class="saved-alert-stat-value">${formatWait(ride.currentWait)}</span>
@@ -319,6 +349,71 @@
 
         <div class="saved-alert-footer">
           Favorite ride from your park pages
+        </div>
+      </a>
+    `).join("");
+  }
+
+  function renderSavedAlerts(alerts) {
+    const container = document.getElementById("savedAlertsList");
+    if (!container) return;
+
+    if (!alerts.length) {
+      container.innerHTML = `
+        <a class="saved-alert-card empty" href="${ALERTS_PAGE_PATH}">
+          <div>
+            <h3>No saved alerts yet</h3>
+            <p>Set a wait time alert on a park page and it will show up here.</p>
+          </div>
+        </a>
+      `;
+      return;
+    }
+
+    container.innerHTML = alerts.map(alert => `
+      <a class="saved-alert-card" href="${ALERTS_PAGE_PATH}">
+        <div class="saved-alert-head">
+          <div class="saved-alert-title-row">
+            <h3>${alert.name}</h3>
+            <span class="saved-alert-chip ${alert.isTriggered ? "hit" : "watching"}">
+              ${alert.isTriggered ? "Hit" : "Watching"}
+            </span>
+          </div>
+          <span class="saved-alert-park">${alert.parkLabel}</span>
+        </div>
+
+        <div class="saved-alert-stats saved-alert-stats-alerts">
+          <div class="saved-alert-stat">
+            <span class="saved-alert-stat-label">Current wait</span>
+            <span class="saved-alert-stat-value">${formatWait(alert.currentWait)}</span>
+          </div>
+          <div class="saved-alert-stat">
+            <span class="saved-alert-stat-label">Your alert</span>
+            <span class="saved-alert-stat-value">${formatWait(alert.waitTime)}</span>
+          </div>
+        </div>
+
+        <div class="saved-alert-stats saved-alert-stats-secondary">
+          <div class="saved-alert-stat">
+            <span class="saved-alert-stat-label">Status</span>
+            <span class="saved-alert-stat-value">${alert.status || "Unknown"}</span>
+          </div>
+          <div class="saved-alert-stat">
+            <span class="saved-alert-stat-label">${alert.isTriggered ? "Hit at" : "State"}</span>
+            <span class="saved-alert-stat-value">${alert.isTriggered ? formatTriggeredTime(alert.triggeredAt) : "Watching now"}</span>
+          </div>
+        </div>
+
+        ${alert.nextLL ? `
+          <div class="saved-alert-ll">
+            <span class="saved-alert-ll-label">LL</span>
+            <span class="saved-alert-ll-value">${alert.nextLL}</span>
+            ${alert.paidLL ? `<span class="saved-alert-ll-price">${alert.paidLL}</span>` : ""}
+          </div>
+        ` : ""}
+
+        <div class="saved-alert-footer">
+          ${alert.isTriggered ? "This alert already hit. Open Alerts for details." : "Open Alerts to update or delete this alert."}
         </div>
       </a>
     `).join("");
@@ -375,6 +470,106 @@
       })
       .filter(item => item.favoriteKeyCandidates.some(key => favoriteRideKeys.includes(key)))
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function buildLocalSavedAlerts(results) {
+    const localAlerts = getLocalWaitTimeAlerts();
+    if (!localAlerts.length) return [];
+
+    return localAlerts
+      .map(alert => {
+        const match = results
+          .flatMap(({ endpoint, payload }) => {
+            const liveData = payload?.data?.liveData || [];
+            return liveData
+              .filter(item => item.entityType === "ATTRACTION")
+              .map(item => ({
+                name: item.name,
+                currentWait: item.queue?.STANDBY?.waitTime,
+                status: item.status || "Unknown",
+                parkLabel: formatParkLabel(item.parkId, endpoint.label),
+                nextLL:
+                  item.queue?.PAID_RETURN_TIME?.state === "AVAILABLE"
+                    ? formatLLTime(item.queue?.PAID_RETURN_TIME?.returnStart)
+                    : item.queue?.RETURN_TIME?.state === "AVAILABLE"
+                      ? formatLLTime(item.queue?.RETURN_TIME?.returnStart)
+                      : null,
+                paidLL:
+                  item.queue?.PAID_RETURN_TIME?.state === "AVAILABLE"
+                    ? item.queue?.PAID_RETURN_TIME?.price?.formatted || null
+                    : null
+              }));
+          })
+          .find(item => item.name === alert.name);
+
+        if (!match) return null;
+
+        const statusLower = String(match.status || "").toLowerCase();
+        const isTriggered =
+          (statusLower === "operating" && typeof match.currentWait === "number" && match.currentWait <= alert.waitTime) ||
+          (statusLower && statusLower !== "operating");
+
+        return {
+          id: `local-${alert.name}`,
+          name: alert.name,
+          parkLabel: match.parkLabel,
+          currentWait: match.currentWait,
+          waitTime: alert.waitTime,
+          status: match.status,
+          isTriggered,
+          triggeredAt: null,
+          nextLL: match.nextLL,
+          paidLL: match.paidLL
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => {
+        if (a.isTriggered !== b.isTriggered) {
+          return a.isTriggered ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name);
+      });
+  }
+
+  function formatParkName(park) {
+    const labels = {
+      wdw: "Walt Disney World",
+      disneyland: "Disneyland Resort",
+      usorlando: "Universal Orlando",
+      hollywood: "Universal Hollywood"
+    };
+
+    return labels[String(park || "").toLowerCase()] || park || "Unknown";
+  }
+
+  async function loadSavedAlerts(results) {
+    const deviceToken = getStoredPushToken();
+
+    if (deviceToken) {
+      try {
+        const response = await fetch(`${baseUrl}/api/alerts?deviceToken=${encodeURIComponent(deviceToken)}`, {
+          cache: "no-store"
+        });
+
+        if (!response.ok) {
+          throw new Error(`Could not load alerts (${response.status})`);
+        }
+
+        const payload = await response.json();
+        const alerts = Array.isArray(payload.data) ? payload.data : [];
+
+        return alerts.map(alert => ({
+          ...alert,
+          parkLabel: formatParkName(alert.park),
+          nextLL: formatLLTime(alert.nextLL),
+          paidLL: alert.paidLL || null
+        }));
+      } catch (error) {
+        console.error("Saved alerts fetch failed:", error);
+      }
+    }
+
+    return buildLocalSavedAlerts(results);
   }
 
   function extractLowestWaits(payload, resortLabel) {
@@ -447,16 +642,19 @@
         .flatMap(({ endpoint, payload }) => extractEvents(payload, endpoint.label))
         .sort((a, b) => new Date(a.time) - new Date(b.time));
       const favoriteRides = buildFavoriteRides(results);
+      const savedAlerts = await loadSavedAlerts(results);
 
       renderFeaturedRide(rides[0]);
       renderLowestWaits(rides);
       renderFavoriteRides(favoriteRides);
+      renderSavedAlerts(savedAlerts);
       renderEvents(events);
     } catch (error) {
       console.error("Homepage live data failed:", error);
       renderFeaturedRide(null);
       renderLowestWaits([]);
       renderFavoriteRides([]);
+      renderSavedAlerts([]);
       renderEvents([]);
     }
   }
