@@ -5,6 +5,8 @@ let favoriteRideKeys = JSON.parse(localStorage.getItem("favoriteRideKeys"));
 if (!Array.isArray(favoriteRideKeys)) favoriteRideKeys = [];
 let parkDataRequestInFlight = false;
 let parkDataRetryTimeoutId = null;
+let lastResumeRefreshAt = 0;
+const appLifecyclePlugin = window.Capacitor?.Plugins?.App;
 
 /*************************
  * LOG SAVED ALERTS
@@ -47,6 +49,19 @@ function queueParkDataRetry(delayMs = 3000) {
     parkDataRetryTimeoutId = null;
     getParkData();
   }, delayMs);
+}
+
+function refreshParkDataOnResume() {
+  const now = Date.now();
+  if (now - lastResumeRefreshAt < 1500) return;
+
+  lastResumeRefreshAt = now;
+
+  if (typeof renderAll === "function") {
+    renderAll();
+  }
+
+  getParkData();
 }
 
 async function getParkData() {
@@ -401,4 +416,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
   getParkData();
   setInterval(getParkData, 30000);
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      refreshParkDataOnResume();
+    }
+  });
+
+  window.addEventListener("pageshow", () => {
+    refreshParkDataOnResume();
+  });
+
+  if (appLifecyclePlugin?.addListener) {
+    appLifecyclePlugin.addListener("appStateChange", state => {
+      if (state?.isActive) {
+        refreshParkDataOnResume();
+      }
+    });
+  }
 });
