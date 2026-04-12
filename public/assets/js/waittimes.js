@@ -177,6 +177,8 @@ async function getParkData() {
         }
         
         if (!parkKey) return;
+        const collectionKey = getCollectionKeyForType(type);
+        const defaultOrder = parks[parkKey][collectionKey].length;
 
         const entry = {
           name: attrName,
@@ -188,12 +190,11 @@ async function getParkData() {
           avgWaitTime: attrAvgWaitTime,
           waitDopBool: waitTimeWillDrop,
           paidLL: paidLLPrice,
-          nextShowTime: nextShowTime
+          nextShowTime: nextShowTime,
+          defaultOrder
         };
 
-        if (type === "attraction") parks[parkKey].rides.push(entry);
-        else if (type === "show") parks[parkKey].shows.push(entry);
-        else parks[parkKey].res.push(entry);
+        parks[parkKey][collectionKey].push(entry);
 
       });
 
@@ -213,6 +214,12 @@ function resetData() {
     parks[p].shows = [];
     parks[p].res = [];
   });
+}
+
+function getCollectionKeyForType(type) {
+  if (type === "attraction") return "rides";
+  if (type === "show") return "shows";
+  return "res";
 }
 
 function getParkKey(parkId) {
@@ -287,8 +294,10 @@ function renderCards(park, type, selector) {
   if (!container) return;
   container.innerHTML = "";
   const items = [...parks[park][type]];
+  const wrapper = container.closest(".card-wrapper");
+  const activeSort = wrapper?.querySelector(".card-sort")?.value || "default";
 
-  if (type === "rides") {
+  if (type === "rides" && activeSort === "default") {
     items.sort((a, b) => {
       const aFavorite = isFavoriteRide(park, a) ? 1 : 0;
       const bFavorite = isFavoriteRide(park, b) ? 1 : 0;
