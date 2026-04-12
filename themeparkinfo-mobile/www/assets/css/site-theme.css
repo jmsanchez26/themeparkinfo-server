@@ -301,6 +301,116 @@ a {
   padding: 0;
 }
 
+.saved-alerts-scroll {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(250px, 280px);
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+}
+
+.saved-alert-card {
+  display: grid;
+  gap: 14px;
+  min-height: 192px;
+  background: linear-gradient(145deg, #ffffff, #f8fbff);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 20px;
+  padding: 16px;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+  text-decoration: none;
+}
+
+.saved-alert-card.empty {
+  grid-auto-flow: row;
+  color: var(--muted);
+}
+
+.saved-alert-head {
+  display: grid;
+  gap: 8px;
+}
+
+.saved-alert-title-row {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.saved-alert-title-row h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.saved-alert-park {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #1d4ed8;
+  background: #dbeafe;
+  border-radius: 999px;
+  padding: 4px 8px;
+  width: fit-content;
+}
+
+.saved-alert-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.saved-alert-chip.hit {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.saved-alert-chip.watching {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.saved-alert-chip.status {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.saved-alert-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.saved-alert-stat {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.saved-alert-stat-label {
+  font-size: 0.73rem;
+  color: var(--muted);
+}
+
+.saved-alert-stat-value {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.saved-alert-footer {
+  margin-top: auto;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
 .attraction-card {
   display: flex;
   justify-content: space-between;
@@ -501,6 +611,10 @@ a {
 
   .park-shortcuts-grid {
     grid-template-columns: 1fr;
+  }
+
+  .saved-alerts-scroll {
+    grid-auto-columns: minmax(230px, 85vw);
   }
 
   .park-shortcut-card {

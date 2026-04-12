@@ -63,6 +63,10 @@
     });
   }
 
+  function formatWait(waitTime) {
+    return typeof waitTime === "number" ? `${waitTime} min` : "N/A";
+  }
+
   function formatTimeInZone(isoString, timezone) {
     const parsed = new Date(isoString);
     if (Number.isNaN(parsed.getTime())) return "TBD";
@@ -233,6 +237,95 @@
     `).join("");
   }
 
+  function renderFavoriteRides(rides) {
+    const container = document.getElementById("favoriteRidesList");
+    if (!container) return;
+
+    if (!rides.length) {
+      container.innerHTML = `
+        <div class="saved-alert-card empty">
+          <div>
+            <h3>No favorite rides yet</h3>
+            <p>Star rides on any park page and they will show up here.</p>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = rides.map(ride => `
+      <div class="saved-alert-card">
+        <div class="saved-alert-head">
+          <div class="saved-alert-title-row">
+            <h3>${ride.name}</h3>
+            <span class="saved-alert-chip ${ride.status?.toLowerCase() === "operating" ? "watching" : "hit"}">
+              ${ride.status?.toLowerCase() === "operating" ? "Open" : (ride.status || "Unknown")}
+            </span>
+          </div>
+          <span class="saved-alert-park">${ride.park}</span>
+        </div>
+
+        <div class="saved-alert-stats">
+          <div class="saved-alert-stat">
+            <span class="saved-alert-stat-label">Current wait</span>
+            <span class="saved-alert-stat-value">${formatWait(ride.currentWait)}</span>
+          </div>
+          <div class="saved-alert-stat">
+            <span class="saved-alert-stat-label">Status</span>
+            <span class="saved-alert-stat-value">${ride.status || "Unknown"}</span>
+          </div>
+        </div>
+
+        <div class="saved-alert-footer">
+          Favorite ride from your park pages
+        </div>
+      </div>
+    `).join("");
+  }
+
+  function getFavoriteRideKeys() {
+    try {
+      const favoriteRideKeys = JSON.parse(localStorage.getItem("favoriteRideKeys")) || [];
+      return Array.isArray(favoriteRideKeys) ? favoriteRideKeys : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function buildFavoriteRides(results) {
+    const favoriteRideKeys = getFavoriteRideKeys();
+    if (!favoriteRideKeys.length) return [];
+
+    return results
+      .flatMap(({ endpoint, payload }) => {
+        const liveData = payload?.data?.liveData || [];
+        return liveData
+          .filter(item => item.entityType === "ATTRACTION")
+          .map(item => ({
+            key: `${Object.keys(parkNames).includes(item.parkId) ? Object.keys(PARK_IDS || {}).find?.(() => false) : ""}`,
+            name: item.name,
+            favoriteKeyCandidates: [
+              `mg::${item.id || item.name}`,
+              `epcot::${item.id || item.name}`,
+              `ak::${item.id || item.name}`,
+              `hollywood::${item.id || item.name}`,
+              `disneyland::${item.id || item.name}`,
+              `caliadv::${item.id || item.name}`,
+              `usfl::${item.id || item.name}`,
+              `islandofAdventure::${item.id || item.name}`,
+              `epic::${item.id || item.name}`,
+              `volcanoBay::${item.id || item.name}`,
+              `usHollywood::${item.id || item.name}`
+            ],
+            currentWait: item.queue?.STANDBY?.waitTime,
+            status: item.status || "Unknown",
+            park: formatParkLabel(item.parkId, endpoint.label)
+          }));
+      })
+      .filter(item => item.favoriteKeyCandidates.some(key => favoriteRideKeys.includes(key)))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   function extractLowestWaits(payload, resortLabel) {
     const liveData = payload?.data?.liveData || [];
 
@@ -302,14 +395,17 @@
       const events = results
         .flatMap(({ endpoint, payload }) => extractEvents(payload, endpoint.label))
         .sort((a, b) => new Date(a.time) - new Date(b.time));
+      const favoriteRides = buildFavoriteRides(results);
 
       renderFeaturedRide(rides[0]);
       renderLowestWaits(rides);
+      renderFavoriteRides(favoriteRides);
       renderEvents(events);
     } catch (error) {
       console.error("Homepage live data failed:", error);
       renderFeaturedRide(null);
       renderLowestWaits([]);
+      renderFavoriteRides([]);
       renderEvents([]);
     }
   }
