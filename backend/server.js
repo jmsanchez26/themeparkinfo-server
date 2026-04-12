@@ -15,6 +15,11 @@ try {
 const app = express();
 const PORT = process.env.PORT || 3000;
 const ALERTS_FILE = path.join(__dirname, "data", "alerts.json");
+const UNIVERSAL_WAIT_HISTORY_FILE = path.join(__dirname, "data", "universal-wait-history.json");
+const UNIVERSAL_CACHE_KEYS = new Set(["usorlando", "hollywood"]);
+const WAIT_HISTORY_RETENTION_DAYS = 14;
+const WAIT_HISTORY_BUCKET_MINUTES = 30;
+const WAIT_HISTORY_FORECAST_STEPS = [30, 60, 90, 120];
 
 app.use(cors());
 app.use(express.json());
@@ -36,6 +41,9 @@ const cache = {};
 const pushState = {
   alerts: [],
   messaging: null
+};
+const waitHistoryState = {
+  rides: {}
 };
 
 let isUpdatingCache = false;
@@ -62,6 +70,16 @@ async function ensureAlertsFile() {
   }
 }
 
+async function ensureWaitHistoryFile() {
+  await fs.mkdir(path.dirname(UNIVERSAL_WAIT_HISTORY_FILE), { recursive: true });
+
+  try {
+    await fs.access(UNIVERSAL_WAIT_HISTORY_FILE);
+  } catch (error) {
+    await fs.writeFile(UNIVERSAL_WAIT_HISTORY_FILE, "{}", "utf8");
+  }
+}
+
 async function loadAlerts() {
   await ensureAlertsFile();
 
@@ -78,6 +96,168 @@ async function loadAlerts() {
 async function persistAlerts() {
   await ensureAlertsFile();
   await fs.writeFile(ALERTS_FILE, JSON.stringify(pushState.alerts, null, 2), "utf8");
+}
+
+async function loadWaitHistory() {
+  await ensureWaitHistoryFile();
+
+  try {
+    const raw = await fs.readFile(UNIVERSAL_WAIT_HISTORY_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    waitHistoryState.rides = parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    console.error("Failed to load Universal wait history:", error.message);
+    waitHistoryState.rides = {};
+  }
+}
+
+async function persistWaitHistory() {
+  await ensureWaitHistoryFile();
+  await fs.writeFile(UNIVERSAL_WAIT_HISTORY_FILE, JSON.stringify(waitHistoryState.rides, null, 2), "utf8");
+}
+
+function isOperatingWaitItem(item) {
+  return (
+    item &&
+    String(item.entityType || "").toUpperCase() === "ATTRACTION" &&
+    String(item.status || "").toLowerCase() === "operating" &&
+    Number.isFinite(item.queue?.STANDBY?.waitTime)
+  );
+}
+
+function buildHistoryRideKey(item) {
+  return `${item.parkId}::${item.id}`;
+}
+
+function isWeekendDate(date) {
+  const day = date.getUTCDay();
+  return day === 0 || day === 6;
+}
+
+function getBucketIndex(date) {
+  return date.getUTCHours() * (60 / WAIT_HISTORY_BUCKET_MINUTES) + Math.floor(date.getUTCMinutes() / WAIT_HISTORY_BUCKET_MINUTES);
+}
+
+function clampWaitTime(value) {
+  return Math.max(0, Math.min(300, Math.round(value)));
+}
+
+function trimRideHistoryEntries(entries, nowMs) {
+  const cutoffMs = nowMs - WAIT_HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  return entries
+    .filter(entry => Number.isFinite(entry.waitTime) && entry.timestamp && new Date(entry.timestamp).getTime() >= cutoffMs)
+    .slice(-800);
+}
+
+function updateUniversalWaitHistory(data, fetchedAt) {
+  const nowMs = fetchedAt.getTime();
+  let changed = false;
+
+  data?.liveData?.forEach(item => {
+    if (!isOperatingWaitItem(item)) return;
+
+    const rideKey = buildHistoryRideKey(item);
+    const existingEntries = Array.isArray(waitHistoryState.rides[rideKey]) ? waitHistoryState.rides[rideKey] : [];
+    const trimmedEntries = trimRideHistoryEntries(existingEntries, nowMs);
+    const waitTime = item.queue.STANDBY.waitTime;
+    const lastEntry = trimmedEntries[trimmedEntries.length - 1];
+
+    if (
+      lastEntry &&
+      lastEntry.waitTime === waitTime &&
+      nowMs - new Date(lastEntry.timestamp).getTime() < 25 * 60 * 1000
+    ) {
+      waitHistoryState.rides[rideKey] = trimmedEntries;
+      return;
+    }
+
+    trimmedEntries.push({
+      timestamp: fetchedAt.toISOString(),
+      waitTime
+    });
+
+    waitHistoryState.rides[rideKey] = trimmedEntries;
+    changed = true;
+  });
+
+  return changed;
+}
+
+function buildSyntheticForecastFromHistory(entries, currentWait, now) {
+  if (!Array.isArray(entries) || entries.length < 3 || !Number.isFinite(currentWait)) {
+    return null;
+  }
+
+  const nowMs = now.getTime();
+  const recentWindowMs = 3 * 60 * 60 * 1000;
+  const recentEntries = entries
+    .map(entry => ({
+      waitTime: entry.waitTime,
+      date: new Date(entry.timestamp)
+    }))
+    .filter(entry => !Number.isNaN(entry.date.getTime()) && nowMs - entry.date.getTime() <= recentWindowMs)
+    .sort((a, b) => a.date - b.date);
+
+  if (!recentEntries.length) {
+    return null;
+  }
+
+  const firstRecent = recentEntries[0];
+  const lastRecent = recentEntries[recentEntries.length - 1];
+  const elapsedMinutes = Math.max(30, (lastRecent.date.getTime() - firstRecent.date.getTime()) / 60000);
+  const trendPerMinute = recentEntries.length > 1 ? (lastRecent.waitTime - firstRecent.waitTime) / elapsedMinutes : 0;
+  const todayIsWeekend = isWeekendDate(now);
+
+  const forecast = WAIT_HISTORY_FORECAST_STEPS.map(stepMinutes => {
+    const targetDate = new Date(nowMs + stepMinutes * 60 * 1000);
+    const targetBucket = getBucketIndex(targetDate);
+    const matchingSamples = entries
+      .map(entry => ({
+        waitTime: entry.waitTime,
+        date: new Date(entry.timestamp)
+      }))
+      .filter(entry => {
+        if (Number.isNaN(entry.date.getTime())) return false;
+        if (isWeekendDate(entry.date) !== todayIsWeekend) return false;
+        return getBucketIndex(entry.date) === targetBucket;
+      })
+      .map(entry => entry.waitTime);
+
+    const trendEstimate = currentWait + trendPerMinute * stepMinutes;
+    const averageEstimate = matchingSamples.length
+      ? matchingSamples.reduce((sum, wait) => sum + wait, 0) / matchingSamples.length
+      : null;
+
+    const blendedEstimate = averageEstimate === null
+      ? trendEstimate
+      : averageEstimate * 0.7 + trendEstimate * 0.3;
+
+    return {
+      time: targetDate.toISOString(),
+      waitTime: clampWaitTime(blendedEstimate)
+    };
+  });
+
+  return forecast.some(point => Number.isFinite(point.waitTime)) ? forecast : null;
+}
+
+function attachUniversalForecasts(data, fetchedAt) {
+  data?.liveData?.forEach(item => {
+    if (!isOperatingWaitItem(item)) return;
+    if (Array.isArray(item.forecast) && item.forecast.length) return;
+
+    const rideKey = buildHistoryRideKey(item);
+    const rideHistory = waitHistoryState.rides[rideKey];
+    const syntheticForecast = buildSyntheticForecastFromHistory(
+      rideHistory,
+      item.queue?.STANDBY?.waitTime,
+      fetchedAt
+    );
+
+    if (syntheticForecast?.length) {
+      item.forecast = syntheticForecast;
+    }
+  });
 }
 
 function parseServiceAccount(rawValue) {
@@ -311,6 +491,8 @@ async function updateCache() {
   console.log("Updating park caches...");
 
   try {
+    let shouldPersistWaitHistory = false;
+
     for (const park in API_URLS) {
       try {
         if (!API_URLS[park]) continue;
@@ -322,6 +504,11 @@ async function updateCache() {
         }
 
         const data = await response.json();
+
+        if (UNIVERSAL_CACHE_KEYS.has(park)) {
+          shouldPersistWaitHistory = updateUniversalWaitHistory(data, new Date()) || shouldPersistWaitHistory;
+          attachUniversalForecasts(data, new Date());
+        }
 
         cache[park].data = data;
         cache[park].lastUpdated = new Date();
@@ -336,6 +523,10 @@ async function updateCache() {
         console.error(`Error updating ${park}:`, error.message);
         cache[park].error = error.message;
       }
+    }
+
+    if (shouldPersistWaitHistory) {
+      await persistWaitHistory();
     }
   } finally {
     isUpdatingCache = false;
@@ -508,6 +699,7 @@ app.use((req, res) => {
 async function startServer() {
   pushState.messaging = initializeFirebaseMessaging();
   await loadAlerts();
+  await loadWaitHistory();
   await updateCache();
 
   setInterval(() => {

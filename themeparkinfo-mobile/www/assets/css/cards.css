@@ -223,6 +223,19 @@
   background: #f8fafc;
 }
 
+.wait-card-modern .llBookingBtn {
+  width: 100%;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.wait-card-modern .llBookingBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(37, 99, 235, 0.12);
+}
+
 .wait-card-modern .saved-alert-stat-label {
   font-size: 0.73rem;
   color: #6b7280;

@@ -112,6 +112,26 @@ function buildRideMapUrl(park, item) {
   return `https://www.google.com/maps?q=${query}&output=embed`;
 }
 
+function getRideBookingUrl(park, item) {
+  if (!item?.NextLL) return null;
+
+  const bookingUrls = {
+    mg: "https://disneyworld.disney.go.com/lightning-lane-passes/",
+    epcot: "https://disneyworld.disney.go.com/lightning-lane-passes/",
+    ak: "https://disneyworld.disney.go.com/lightning-lane-passes/",
+    hollywood: "https://disneyworld.disney.go.com/lightning-lane-passes/",
+    disneyland: "https://disneyland.disney.go.com/lightning-lane-passes/",
+    caliadv: "https://disneyland.disney.go.com/lightning-lane-passes/"
+  };
+
+  return bookingUrls[park] || null;
+}
+
+function openRideBookingUrl(url) {
+  if (!url) return;
+  window.location.href = url;
+}
+
 function getRideLLDetails(item) {
   return {
     label: item.llLabel || (item.paidLL ? "LL" : item.NextLL ? "MLL" : null),
@@ -130,6 +150,7 @@ function openRideDetailsModal(park, item) {
   const insightText = formatRideInsight(item);
   const mapUrl = buildRideMapUrl(park, item);
   const showLL = DISNEY_RIDE_PARKS.has(park);
+  const showInsight = item.rideNow !== null || item.waitDopBool === true || (item.avgWaitTime !== null && typeof item.avgWaitTime === "number");
   const llDetails = getRideLLDetails(item);
 
   modal.innerHTML = `
@@ -162,10 +183,12 @@ function openRideDetailsModal(park, item) {
             ${item.paidLL ? `<span class="rideDetailsSubvalue">${item.paidLL}</span>` : ""}
           </div>
         ` : ""}
-        <div class="rideDetailsStat">
-          <span class="rideDetailsLabel">Wait insight</span>
-          <strong>${insightText}</strong>
-        </div>
+        ${showInsight ? `
+          <div class="rideDetailsStat">
+            <span class="rideDetailsLabel">Wait insight</span>
+            <strong>${insightText}</strong>
+          </div>
+        ` : ""}
       </div>
 
       <div class="rideDetailsSection">
@@ -493,6 +516,8 @@ function renderCards(park, type, selector) {
     const nextShowTime = item.nextShowTime;
     const isFavorite = type === "rides" && isFavoriteRide(park, item);
     const llDetails = getRideLLDetails(item);
+    const bookingUrl = getRideBookingUrl(park, item);
+    const showDisneyLL = DISNEY_RIDE_PARKS.has(park) && nextLLTime;
     let waitForecastIcon = '';
     card.className = type === "rides" ? "wait-card wait-card-modern" : "wait-card";
     if (statusLower === "operating" && hasWait && rideNow !== null) {
@@ -523,12 +548,12 @@ function renderCards(park, type, selector) {
             </span>
           </div>
           ${
-            nextLLTime
-              ? `<div class="saved-alert-stat">
+            showDisneyLL
+              ? `<button class="saved-alert-stat llBookingBtn" type="button" aria-label="Open ${llDetails.label || "LL"} booking">
                   <span class="saved-alert-stat-label">${llDetails.label || "LL"}</span>
                   <span class="saved-alert-stat-value">${llDetails.time || nextLLTime}</span>
                   ${llDetails.price ? `<span class="saved-alert-stat-subvalue">${llDetails.price}</span>` : ""}
-                </div>`
+                </button>`
               : ``
           }
         </div>
@@ -536,6 +561,7 @@ function renderCards(park, type, selector) {
         ${
           statusLower === "operating" &&
           hasWait &&
+          rideNow === false &&
           waitWillDrop === true &&
           rideAverageWaitTime !== null
             ? `
@@ -620,6 +646,7 @@ function renderCards(park, type, selector) {
       card.addEventListener("click", (event) => {
         if (
           event.target.closest(".waitTimeRemBtn") ||
+          event.target.closest(".llBookingBtn") ||
           event.target.closest(".favoriteRideBtn") ||
           event.target.closest(".addInfo-header") ||
           event.target.closest(".addInfo-content")
@@ -634,6 +661,11 @@ function renderCards(park, type, selector) {
         event.stopPropagation();
         toggleFavoriteRide(park, item);
         renderAll();
+      });
+
+      card.querySelector(".llBookingBtn")?.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openRideBookingUrl(bookingUrl);
       });
     }
 
