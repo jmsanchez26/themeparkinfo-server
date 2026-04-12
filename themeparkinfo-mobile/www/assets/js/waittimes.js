@@ -295,18 +295,11 @@ function renderCards(park, type, selector) {
   container.innerHTML = "";
   const items = [...parks[park][type]];
   const wrapper = container.closest(".card-wrapper");
-  const activeSort = wrapper?.querySelector(".card-sort")?.value || "default";
-
-  if (type === "rides" && activeSort === "default") {
+  if (type === "rides") {
     items.sort((a, b) => {
       const aFavorite = isFavoriteRide(park, a) ? 1 : 0;
       const bFavorite = isFavoriteRide(park, b) ? 1 : 0;
-
-      if (aFavorite !== bFavorite) {
-        return bFavorite - aFavorite;
-      }
-
-      return a.name.localeCompare(b.name);
+      return bFavorite - aFavorite;
     });
   }
 
@@ -461,7 +454,10 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof initParkTabs === "function") initParkTabs();
   if (typeof initSubTabs === "function") initSubTabs();
 
-  getParkHours(intialparkHrs);
+  const requestedPark = new URLSearchParams(window.location.search).get("park");
+  if (!requestedPark) {
+    getParkHours(intialparkHrs);
+  }
   logSavedAlerts("page load");
 
   getParkData();
