@@ -127,6 +127,10 @@
   box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
 }
 
+.wait-card-modern {
+  cursor: pointer;
+}
+
 .wait-card-inner {
   display: flex;
   justify-content: space-between;

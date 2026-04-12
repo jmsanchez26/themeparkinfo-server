@@ -1,0 +1,171 @@
+.rideDetailsModal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top, rgba(59, 130, 246, 0.18), transparent 32%),
+    rgba(15, 23, 42, 0.68);
+  backdrop-filter: blur(10px);
+}
+
+.rideDetailsModalInner {
+  width: min(980px, 100%);
+  max-height: 88vh;
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.1), transparent 30%),
+    linear-gradient(180deg, #ffffff, #f8fbff);
+  border-radius: 32px;
+  padding: 26px;
+  box-shadow: 0 34px 80px rgba(15, 23, 42, 0.3);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  position: relative;
+  display: grid;
+  gap: 20px;
+}
+
+.rideDetailsCloseBtn {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #1d4ed8;
+  font-size: 18px;
+  cursor: pointer;
+  z-index: 2;
+  box-shadow:
+    inset 0 0 0 1px rgba(148, 163, 184, 0.16),
+    0 10px 20px rgba(15, 23, 42, 0.08);
+}
+
+.rideDetailsHero {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 26px;
+  background:
+    linear-gradient(145deg, #0f172a, #1d4ed8 62%, #38bdf8);
+  color: #ffffff;
+  box-shadow: 0 18px 40px rgba(29, 78, 216, 0.22);
+}
+
+.rideDetailsHero h2 {
+  margin: 0;
+  font-size: clamp(1.6rem, 3vw, 2.3rem);
+  line-height: 1.1;
+  color: #ffffff;
+}
+
+.rideDetailsPark {
+  display: inline-flex;
+  width: fit-content;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rideDetailsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.rideDetailsStat {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: linear-gradient(145deg, #ffffff, #f8fbff);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.05);
+}
+
+.rideDetailsLabel {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rideDetailsStat strong {
+  font-size: 1.05rem;
+  line-height: 1.4;
+  color: #0f172a;
+}
+
+.rideDetailsSubvalue {
+  font-size: 0.84rem;
+  color: #475569;
+}
+
+.rideDetailsSection {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 24px;
+  background: linear-gradient(145deg, #ffffff, #f8fbff);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.05);
+}
+
+.rideDetailsSection h3 {
+  margin: 0;
+  font-size: 1.02rem;
+  color: #0f172a;
+}
+
+.rideDetailsMapWrap {
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  min-height: 360px;
+  background: #e2e8f0;
+}
+
+.rideDetailsMapWrap iframe {
+  width: 100%;
+  height: 100%;
+  min-height: 360px;
+  border: 0;
+}
+
+@media (max-width: 640px) {
+  .rideDetailsModal {
+    padding: 10px;
+  }
+
+  .rideDetailsModalInner {
+    max-height: 92vh;
+    padding: 18px;
+    border-radius: 24px;
+  }
+
+  .rideDetailsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .rideDetailsHero,
+  .rideDetailsSection {
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .rideDetailsMapWrap,
+  .rideDetailsMapWrap iframe {
+    min-height: 280px;
+  }
+}

@@ -94,6 +94,23 @@
     return `${hours}:${minutes} ${suffix}`;
   }
 
+  function getRideLLDetails(queue) {
+    const paidReturn = queue?.PAID_RETURN_TIME;
+    const regularReturn = queue?.RETURN_TIME;
+    const hasPaidReturn = !!paidReturn?.returnStart;
+    const hasRegularReturn = !!regularReturn?.returnStart;
+
+    return {
+      label: hasPaidReturn ? "LL" : hasRegularReturn ? "MLL" : null,
+      nextLL: hasPaidReturn
+        ? formatLLTime(paidReturn?.returnStart)
+        : hasRegularReturn
+          ? formatLLTime(regularReturn?.returnStart)
+          : null,
+      paidLL: hasPaidReturn ? paidReturn?.price?.formatted || null : null
+    };
+  }
+
   function formatTriggeredTime(isoTime) {
     if (!isoTime) return "Not hit yet";
 
@@ -341,7 +358,7 @@
 
         ${ride.nextLL ? `
           <div class="saved-alert-ll">
-            <span class="saved-alert-ll-label">LL</span>
+            <span class="saved-alert-ll-label">${ride.llLabel || "LL"}</span>
             <span class="saved-alert-ll-value">${ride.nextLL}</span>
             ${ride.paidLL ? `<span class="saved-alert-ll-price">${ride.paidLL}</span>` : ""}
           </div>
@@ -406,7 +423,7 @@
 
         ${alert.nextLL ? `
           <div class="saved-alert-ll">
-            <span class="saved-alert-ll-label">LL</span>
+            <span class="saved-alert-ll-label">${alert.llLabel || "LL"}</span>
             <span class="saved-alert-ll-value">${alert.nextLL}</span>
             ${alert.paidLL ? `<span class="saved-alert-ll-price">${alert.paidLL}</span>` : ""}
           </div>
@@ -456,16 +473,9 @@
             currentWait: item.queue?.STANDBY?.waitTime,
             status: item.status || "Unknown",
             park: formatParkLabel(item.parkId, endpoint.label),
-            nextLL:
-              item.queue?.PAID_RETURN_TIME?.state === "AVAILABLE"
-                ? formatLLTime(item.queue?.PAID_RETURN_TIME?.returnStart)
-                : item.queue?.RETURN_TIME?.state === "AVAILABLE"
-                  ? formatLLTime(item.queue?.RETURN_TIME?.returnStart)
-                  : null,
-            paidLL:
-              item.queue?.PAID_RETURN_TIME?.state === "AVAILABLE"
-                ? item.queue?.PAID_RETURN_TIME?.price?.formatted || null
-                : null
+            llLabel: getRideLLDetails(item.queue).label,
+            nextLL: getRideLLDetails(item.queue).nextLL,
+            paidLL: getRideLLDetails(item.queue).paidLL
           }));
       })
       .filter(item => item.favoriteKeyCandidates.some(key => favoriteRideKeys.includes(key)))
@@ -488,16 +498,9 @@
                 currentWait: item.queue?.STANDBY?.waitTime,
                 status: item.status || "Unknown",
                 parkLabel: formatParkLabel(item.parkId, endpoint.label),
-                nextLL:
-                  item.queue?.PAID_RETURN_TIME?.state === "AVAILABLE"
-                    ? formatLLTime(item.queue?.PAID_RETURN_TIME?.returnStart)
-                    : item.queue?.RETURN_TIME?.state === "AVAILABLE"
-                      ? formatLLTime(item.queue?.RETURN_TIME?.returnStart)
-                      : null,
-                paidLL:
-                  item.queue?.PAID_RETURN_TIME?.state === "AVAILABLE"
-                    ? item.queue?.PAID_RETURN_TIME?.price?.formatted || null
-                    : null
+                llLabel: getRideLLDetails(item.queue).label,
+                nextLL: getRideLLDetails(item.queue).nextLL,
+                paidLL: getRideLLDetails(item.queue).paidLL
               }));
           })
           .find(item => item.name === alert.name);
@@ -518,6 +521,7 @@
           status: match.status,
           isTriggered,
           triggeredAt: null,
+          llLabel: match.llLabel,
           nextLL: match.nextLL,
           paidLL: match.paidLL
         };
@@ -561,6 +565,7 @@
         return alerts.map(alert => ({
           ...alert,
           parkLabel: formatParkName(alert.park),
+          llLabel: alert.llLabel || (alert.paidLL ? "LL" : alert.nextLL ? "MLL" : null),
           nextLL: formatLLTime(alert.nextLL),
           paidLL: alert.paidLL || null
         }));
