@@ -536,7 +536,7 @@ a {
 
 .footer-shortcuts {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 4px;
 }
 
@@ -580,6 +580,10 @@ a {
 
 .footer-icon-alerts {
   color: #22c55e;
+}
+
+.footer-icon-reservations {
+  color: #f97316;
 }
 
 .footer-shortcut span {

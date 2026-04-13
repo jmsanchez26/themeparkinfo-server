@@ -15,6 +15,7 @@ try {
 const app = express();
 const PORT = process.env.PORT || 3000;
 const ALERTS_FILE = path.join(__dirname, "data", "alerts.json");
+const RESERVATION_ALERTS_FILE = path.join(__dirname, "data", "reservation-alerts.json");
 const UNIVERSAL_WAIT_HISTORY_FILE = path.join(__dirname, "data", "universal-wait-history.json");
 const UNIVERSAL_CACHE_KEYS = new Set(["usorlando", "hollywood"]);
 const WAIT_HISTORY_RETENTION_DAYS = 14;
@@ -40,6 +41,7 @@ for (const park in API_URLS) {
 const cache = {};
 const pushState = {
   alerts: [],
+  reservationAlerts: [],
   messaging: null
 };
 const waitHistoryState = {
@@ -60,6 +62,10 @@ function normalizeParkKey(park) {
   return String(park || "").trim().toLowerCase();
 }
 
+function normalizeReservationProvider(provider) {
+  return String(provider || "").trim().toLowerCase();
+}
+
 async function ensureAlertsFile() {
   await fs.mkdir(path.dirname(ALERTS_FILE), { recursive: true });
 
@@ -67,6 +73,16 @@ async function ensureAlertsFile() {
     await fs.access(ALERTS_FILE);
   } catch (error) {
     await fs.writeFile(ALERTS_FILE, "[]", "utf8");
+  }
+}
+
+async function ensureReservationAlertsFile() {
+  await fs.mkdir(path.dirname(RESERVATION_ALERTS_FILE), { recursive: true });
+
+  try {
+    await fs.access(RESERVATION_ALERTS_FILE);
+  } catch (error) {
+    await fs.writeFile(RESERVATION_ALERTS_FILE, "[]", "utf8");
   }
 }
 
@@ -93,9 +109,27 @@ async function loadAlerts() {
   }
 }
 
+async function loadReservationAlerts() {
+  await ensureReservationAlertsFile();
+
+  try {
+    const raw = await fs.readFile(RESERVATION_ALERTS_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    pushState.reservationAlerts = Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.error("Failed to load reservation alerts:", error.message);
+    pushState.reservationAlerts = [];
+  }
+}
+
 async function persistAlerts() {
   await ensureAlertsFile();
   await fs.writeFile(ALERTS_FILE, JSON.stringify(pushState.alerts, null, 2), "utf8");
+}
+
+async function persistReservationAlerts() {
+  await ensureReservationAlertsFile();
+  await fs.writeFile(RESERVATION_ALERTS_FILE, JSON.stringify(pushState.reservationAlerts, null, 2), "utf8");
 }
 
 async function loadWaitHistory() {
@@ -382,6 +416,30 @@ function buildAlertSnapshot(alert) {
   };
 }
 
+function buildReservationAlertSnapshot(alert) {
+  return {
+    ...alert,
+    status: alert.status || "watching",
+    enabled: alert.enabled !== false,
+    lastCheckedAt: alert.lastCheckedAt || null,
+    lastMatchAt: alert.lastMatchAt || null
+  };
+}
+
+function sortReservationAlerts(alerts) {
+  return [...alerts].sort((a, b) => {
+    if ((a.enabled !== false) !== (b.enabled !== false)) {
+      return a.enabled === false ? 1 : -1;
+    }
+
+    if (a.preferredDate && b.preferredDate && a.preferredDate !== b.preferredDate) {
+      return a.preferredDate.localeCompare(b.preferredDate);
+    }
+
+    return String(a.restaurantName || "").localeCompare(String(b.restaurantName || ""));
+  });
+}
+
 function reconcileTriggeredStateForPark(park) {
   let changed = false;
 
@@ -602,6 +660,203 @@ app.get("/api/alerts", (req, res) => {
   });
 });
 
+app.post("/api/reservation-alerts", async (req, res) => {
+  const provider = normalizeReservationProvider(req.body.provider);
+  const restaurantName = String(req.body.restaurantName || "").trim();
+  const partySize = Number(req.body.partySize);
+  const preferredDate = String(req.body.preferredDate || "").trim();
+  const startTime = String(req.body.startTime || "").trim();
+  const endTime = String(req.body.endTime || "").trim();
+  const ownerKey = String(req.body.ownerKey || "").trim();
+  const deviceToken = String(req.body.deviceToken || "").trim();
+
+  const validProviders = new Set(["wdw", "disneyland", "usorlando", "hollywood"]);
+
+  if (!validProviders.has(provider)) {
+    return res.status(400).json({
+      error: true,
+      message: "Invalid reservation provider"
+    });
+  }
+
+  if (!restaurantName || !ownerKey || !Number.isFinite(partySize) || partySize < 1 || !preferredDate || !startTime || !endTime) {
+    return res.status(400).json({
+      error: true,
+      message: "Missing or invalid reservation alert fields"
+    });
+  }
+
+  const existingAlert = pushState.reservationAlerts.find(alert =>
+    alert.ownerKey === ownerKey &&
+    alert.provider === provider &&
+    alert.restaurantName.toLowerCase() === restaurantName.toLowerCase() &&
+    alert.preferredDate === preferredDate
+  );
+
+  if (existingAlert) {
+    existingAlert.partySize = partySize;
+    existingAlert.startTime = startTime;
+    existingAlert.endTime = endTime;
+    existingAlert.enabled = true;
+    existingAlert.updatedAt = new Date().toISOString();
+    existingAlert.deviceToken = deviceToken || existingAlert.deviceToken || "";
+    await persistReservationAlerts();
+
+    return res.status(201).json({
+      success: true,
+      data: buildReservationAlertSnapshot(existingAlert)
+    });
+  }
+
+  const newAlert = {
+    id: randomUUID(),
+    provider,
+    restaurantName,
+    partySize,
+    preferredDate,
+    startTime,
+    endTime,
+    ownerKey,
+    deviceToken,
+    enabled: true,
+    status: "watching",
+    createdAt: new Date().toISOString()
+  };
+
+  pushState.reservationAlerts.push(newAlert);
+  await persistReservationAlerts();
+
+  return res.status(201).json({
+    success: true,
+    data: buildReservationAlertSnapshot(newAlert)
+  });
+});
+
+app.get("/api/reservation-alerts", (req, res) => {
+  const ownerKey = String(req.query.ownerKey || "").trim();
+  const alerts = ownerKey
+    ? pushState.reservationAlerts.filter(alert => alert.ownerKey === ownerKey)
+    : pushState.reservationAlerts;
+
+  return res.json({
+    data: sortReservationAlerts(alerts).map(buildReservationAlertSnapshot)
+  });
+});
+
+app.patch("/api/reservation-alerts/:id", async (req, res) => {
+  const alertId = String(req.params.id || "").trim();
+  const ownerKey = String(req.body.ownerKey || "").trim();
+  const alert = pushState.reservationAlerts.find(entry => entry.id === alertId);
+
+  if (!alert) {
+    return res.status(404).json({
+      error: true,
+      message: "Reservation alert not found"
+    });
+  }
+
+  if (ownerKey && alert.ownerKey !== ownerKey) {
+    return res.status(403).json({
+      error: true,
+      message: "This reservation alert does not belong to this device"
+    });
+  }
+
+  if (req.body.restaurantName !== undefined) {
+    const restaurantName = String(req.body.restaurantName || "").trim();
+    if (!restaurantName) {
+      return res.status(400).json({
+        error: true,
+        message: "Restaurant name is required"
+      });
+    }
+    alert.restaurantName = restaurantName;
+  }
+
+  if (req.body.partySize !== undefined) {
+    const partySize = Number(req.body.partySize);
+    if (!Number.isFinite(partySize) || partySize < 1) {
+      return res.status(400).json({
+        error: true,
+        message: "Party size must be at least 1"
+      });
+    }
+    alert.partySize = partySize;
+  }
+
+  if (req.body.preferredDate !== undefined) {
+    const preferredDate = String(req.body.preferredDate || "").trim();
+    if (!preferredDate) {
+      return res.status(400).json({
+        error: true,
+        message: "Preferred date is required"
+      });
+    }
+    alert.preferredDate = preferredDate;
+  }
+
+  if (req.body.startTime !== undefined) {
+    const startTime = String(req.body.startTime || "").trim();
+    if (!startTime) {
+      return res.status(400).json({
+        error: true,
+        message: "Start time is required"
+      });
+    }
+    alert.startTime = startTime;
+  }
+
+  if (req.body.endTime !== undefined) {
+    const endTime = String(req.body.endTime || "").trim();
+    if (!endTime) {
+      return res.status(400).json({
+        error: true,
+        message: "End time is required"
+      });
+    }
+    alert.endTime = endTime;
+  }
+
+  if (req.body.enabled !== undefined) {
+    alert.enabled = Boolean(req.body.enabled);
+  }
+
+  alert.updatedAt = new Date().toISOString();
+  await persistReservationAlerts();
+
+  return res.json({
+    success: true,
+    data: buildReservationAlertSnapshot(alert)
+  });
+});
+
+app.delete("/api/reservation-alerts/:id", async (req, res) => {
+  const alertId = String(req.params.id || "").trim();
+  const ownerKey = String(req.query.ownerKey || "").trim();
+  const alert = pushState.reservationAlerts.find(entry => entry.id === alertId);
+
+  if (!alert) {
+    return res.status(404).json({
+      error: true,
+      message: "Reservation alert not found"
+    });
+  }
+
+  if (ownerKey && alert.ownerKey !== ownerKey) {
+    return res.status(403).json({
+      error: true,
+      message: "This reservation alert does not belong to this device"
+    });
+  }
+
+  pushState.reservationAlerts = pushState.reservationAlerts.filter(entry => entry.id !== alertId);
+  await persistReservationAlerts();
+
+  return res.json({
+    success: true
+  });
+});
+
 app.patch("/api/alerts/:id", async (req, res) => {
   const alertId = String(req.params.id || "").trim();
   const waitTime = Number(req.body.waitTime);
@@ -699,6 +954,7 @@ app.use((req, res) => {
 async function startServer() {
   pushState.messaging = initializeFirebaseMessaging();
   await loadAlerts();
+  await loadReservationAlerts();
   await loadWaitHistory();
   await updateCache();
 
