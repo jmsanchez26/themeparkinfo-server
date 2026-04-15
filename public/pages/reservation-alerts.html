@@ -17,16 +17,13 @@
     <section class="alerts-hero">
       <h2>Restaurant Reservation Alerts</h2>
       <p>Save separate dining reservation watches for Disney and Universal restaurants without mixing them into your ride alert page.</p>
-      <div class="reservation-hero-actions">
-        <a class="reservation-link-btn" href="/pages/alerts.html">Ride Wait Alerts</a>
-      </div>
     </section>
 
     <section class="reservation-form-card">
       <div class="reservation-form-head">
         <div>
           <h3>Create a restaurant alert</h3>
-          <p>Tell us the restaurant, party size, and time window you want to watch.</p>
+          <p>Pick a destination, choose a known restaurant, then set the party size and time window you want us to watch.</p>
         </div>
         <div class="alerts-status" id="reservationAlertsStatus">Loading restaurant alerts...</div>
       </div>
@@ -44,7 +41,9 @@
 
         <label class="reservation-span-2">
           <span>Restaurant name</span>
-          <input id="reservationRestaurantName" type="text" placeholder="Example: Space 220 Lounge" required />
+          <select id="reservationRestaurantName" required>
+            <option value="">Choose a restaurant</option>
+          </select>
         </label>
 
         <label>

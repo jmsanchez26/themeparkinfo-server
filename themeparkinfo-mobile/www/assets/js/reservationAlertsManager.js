@@ -2,6 +2,80 @@
   const baseUrl = window.__API_BASE__ || "";
   const OWNER_KEY_STORAGE = "reservationAlertOwnerKey";
   const PUSH_TOKEN_STORAGE = "pushDeviceToken";
+  const RESTAURANT_OPTIONS = {
+    wdw: [
+      "Be Our Guest Restaurant",
+      "Cinderella's Royal Table",
+      "Chef Mickey's",
+      "California Grill",
+      "Topolino's Terrace - Flavors of the Riviera",
+      "Space 220 Restaurant",
+      "Space 220 Lounge",
+      "Le Cellier Steakhouse",
+      "Via Napoli Ristorante e Pizzeria",
+      "Biergarten Restaurant",
+      "Sci-Fi Dine-In Theater Restaurant",
+      "50's Prime Time Cafe",
+      "Hollywood Brown Derby",
+      "Roundup Rodeo BBQ",
+      "Oga's Cantina",
+      "Tusker House Restaurant",
+      "Yak & Yeti Restaurant",
+      "Tiffins Restaurant",
+      "Boma - Flavors of Africa",
+      "Sanaa",
+      "Story Book Dining at Artist Point with Snow White",
+      "Ohana",
+      "Cape May Cafe"
+    ],
+    disneyland: [
+      "Blue Bayou Restaurant",
+      "Cafe Orleans",
+      "Carnation Cafe",
+      "River Belle Terrace",
+      "Plaza Inn",
+      "Lamplight Lounge",
+      "Lamplight Lounge - Boardwalk Dining",
+      "Carthay Circle Restaurant",
+      "Wine Country Trattoria",
+      "Magic Key Terrace",
+      "Naples Ristorante e Bar",
+      "Catal Restaurant",
+      "Uva Bar & Cafe",
+      "Storytellers Cafe",
+      "Goofy's Kitchen",
+      "Palm Breeze Bar",
+      "Hearthstone Lounge"
+    ],
+    usorlando: [
+      "Mythos Restaurant",
+      "Confisco Grille",
+      "Lombard's Seafood Grille",
+      "Finnegan's Bar & Grill",
+      "The Kitchen",
+      "Bigfire",
+      "Antojitos Authentic Mexican Food",
+      "Cowfish Sushi Burger Bar",
+      "NBC Sports Grill & Brew",
+      "Toothsome Chocolate Emporium & Savory Feast Kitchen",
+      "Vivo Italian Kitchen",
+      "Pat O'Brien's",
+      "Jake's American Bar",
+      "Mama Della's Ristorante",
+      "Bice Ristorante",
+      "Amatista Cookhouse"
+    ],
+    hollywood: [
+      "Toadstool Cafe",
+      "Antojitos Cocina Mexicana",
+      "The Three Broomsticks",
+      "Krusty Burger Patio",
+      "Saddle Ranch Chop House CityWalk",
+      "Jimmy Buffett's Margaritaville",
+      "Voodoo Doughnut CityWalk",
+      "Buca di Beppo CityWalk"
+    ]
+  };
   let refreshTimerId = null;
   let pendingDeleteAlert = null;
 
@@ -18,6 +92,25 @@
 
   function getPushToken() {
     return localStorage.getItem(PUSH_TOKEN_STORAGE) || "";
+  }
+
+  function getRestaurantSelect() {
+    return document.getElementById("reservationRestaurantName");
+  }
+
+  function populateRestaurantOptions(provider, selectedValue = "") {
+    const select = getRestaurantSelect();
+    if (!select) return;
+
+    const options = RESTAURANT_OPTIONS[String(provider || "").toLowerCase()] || [];
+    const resolvedValue = options.includes(selectedValue) ? selectedValue : "";
+
+    select.innerHTML = [
+      '<option value="">Choose a restaurant</option>',
+      ...options.map(name => `<option value="${name}">${name}</option>`)
+    ].join("");
+
+    select.value = resolvedValue;
   }
 
   function formatProvider(provider) {
@@ -254,6 +347,11 @@
   });
 
   document.addEventListener("DOMContentLoaded", () => {
+    const providerSelect = document.getElementById("reservationProvider");
+    providerSelect?.addEventListener("change", event => {
+      populateRestaurantOptions(event.target.value);
+    });
+
     document.getElementById("reservationAlertForm")?.addEventListener("submit", async event => {
       event.preventDefault();
       const status = document.getElementById("reservationAlertsStatus");
@@ -261,8 +359,8 @@
       try {
         status.textContent = "Saving restaurant alert...";
         await saveReservationAlert({
-          provider: document.getElementById("reservationProvider").value,
-          restaurantName: document.getElementById("reservationRestaurantName").value,
+          provider: providerSelect.value,
+          restaurantName: getRestaurantSelect().value,
           partySize: Number(document.getElementById("reservationPartySize").value),
           preferredDate: document.getElementById("reservationDate").value,
           startTime: document.getElementById("reservationStartTime").value,
@@ -272,6 +370,8 @@
         });
 
         event.target.reset();
+        providerSelect.value = "wdw";
+        populateRestaurantOptions(providerSelect.value);
         document.getElementById("reservationPartySize").value = 2;
         await loadReservationAlerts();
       } catch (error) {
@@ -305,6 +405,7 @@
       }
     });
 
+    populateRestaurantOptions(providerSelect?.value || "wdw");
     loadReservationAlerts();
   });
 })();
