@@ -66,6 +66,12 @@ function normalizeReservationProvider(provider) {
   return String(provider || "").trim().toLowerCase();
 }
 
+function isAuthorizedReservationWorkerRequest(req) {
+  const configuredSecret = String(process.env.RESERVATION_WORKER_SHARED_SECRET || "").trim();
+  if (!configuredSecret) return false;
+  return String(req.headers["x-reservation-worker-secret"] || "").trim() === configuredSecret;
+}
+
 async function ensureAlertsFile() {
   await fs.mkdir(path.dirname(ALERTS_FILE), { recursive: true });
 
@@ -747,6 +753,7 @@ app.patch("/api/reservation-alerts/:id", async (req, res) => {
   const alertId = String(req.params.id || "").trim();
   const ownerKey = String(req.body.ownerKey || "").trim();
   const alert = pushState.reservationAlerts.find(entry => entry.id === alertId);
+  const isWorkerRequest = isAuthorizedReservationWorkerRequest(req);
 
   if (!alert) {
     return res.status(404).json({
@@ -755,7 +762,7 @@ app.patch("/api/reservation-alerts/:id", async (req, res) => {
     });
   }
 
-  if (ownerKey && alert.ownerKey !== ownerKey) {
+  if (!isWorkerRequest && ownerKey && alert.ownerKey !== ownerKey) {
     return res.status(403).json({
       error: true,
       message: "This reservation alert does not belong to this device"
@@ -821,6 +828,24 @@ app.patch("/api/reservation-alerts/:id", async (req, res) => {
     alert.enabled = Boolean(req.body.enabled);
   }
 
+  if (isWorkerRequest) {
+    if (req.body.status !== undefined) {
+      alert.status = String(req.body.status || "").trim() || alert.status || "watching";
+    }
+
+    if (req.body.lastCheckedAt !== undefined) {
+      alert.lastCheckedAt = req.body.lastCheckedAt || null;
+    }
+
+    if (req.body.lastMatchAt !== undefined) {
+      alert.lastMatchAt = req.body.lastMatchAt || null;
+    }
+
+    if (req.body.deviceToken !== undefined) {
+      alert.deviceToken = String(req.body.deviceToken || "").trim();
+    }
+  }
+
   alert.updatedAt = new Date().toISOString();
   await persistReservationAlerts();
 
@@ -834,6 +859,7 @@ app.delete("/api/reservation-alerts/:id", async (req, res) => {
   const alertId = String(req.params.id || "").trim();
   const ownerKey = String(req.query.ownerKey || "").trim();
   const alert = pushState.reservationAlerts.find(entry => entry.id === alertId);
+  const isWorkerRequest = isAuthorizedReservationWorkerRequest(req);
 
   if (!alert) {
     return res.status(404).json({
@@ -842,7 +868,7 @@ app.delete("/api/reservation-alerts/:id", async (req, res) => {
     });
   }
 
-  if (ownerKey && alert.ownerKey !== ownerKey) {
+  if (!isWorkerRequest && ownerKey && alert.ownerKey !== ownerKey) {
     return res.status(403).json({
       error: true,
       message: "This reservation alert does not belong to this device"

@@ -19,12 +19,7 @@ This project now supports a separate dining reservation worker process.
 
 ## Current state
 
-The worker architecture is live, but the provider checkers are still placeholders:
-
-- `providers/disneyDiningChecker.js`
-- `providers/universalDiningChecker.js`
-
-Those files are where Playwright-based reservation checking lives.
+The worker architecture is live.
 
 - `providers/disneyDiningChecker.js`
   - now uses Playwright to open the Disney dining availability flow
@@ -44,8 +39,9 @@ Those files are where Playwright-based reservation checking lives.
 
 ## Files used by the worker
 
-- `data/reservation-alerts.json`
 - `data/reservation-query-cache.json`
+
+When `RESERVATION_API_BASE_URL` is set, the worker reads reservation alerts from the API instead of local JSON files. This is the recommended setup when the API and worker run as separate Render services.
 
 ## Suggested deployment
 
@@ -73,6 +69,12 @@ npm run start:reservation-worker
   - default: `21600000` (6 hours)
 - `RESERVATION_WORKER_CONCURRENCY`
   - default: `3`
+- `RESERVATION_API_BASE_URL`
+  - recommended when the worker runs separately from the API
+  - example: `https://themeparkinfo-api.onrender.com`
+- `RESERVATION_WORKER_SHARED_SECRET`
+  - optional but recommended
+  - use the same value on the API service and the worker so the worker can update alert status safely
 - `DISNEY_LOGIN_EMAIL`
   - required for Disney reservation checks
 - `DISNEY_LOGIN_PASSWORD`
