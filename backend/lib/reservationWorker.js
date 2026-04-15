@@ -133,6 +133,12 @@ async function runReservationWorkerCycle({ messaging, log = console } = {}) {
       matches
     };
 
+    if (!available && (result?.error || result?.note)) {
+      log.log(
+        `Reservation worker detail for ${group.restaurantName} (${group.preferredDate} ${group.startTime}-${group.endTime}): ${result.error || result.note}`
+      );
+    }
+
     if (!available) {
       return;
     }

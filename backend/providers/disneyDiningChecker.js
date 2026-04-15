@@ -136,7 +136,7 @@ async function fillRestaurant(page, restaurantName) {
     page.locator('input[aria-label*="Restaurant" i]')
   ]);
 
-  if (!input) return false;
+  if (!input) return { found: false, selected: false };
 
   await input.click();
   await input.fill(restaurantName);
@@ -151,10 +151,10 @@ async function fillRestaurant(page, restaurantName) {
 
   if (option) {
     await option.click().catch(() => {});
-    return true;
+    return { found: true, selected: true };
   }
 
-  return true;
+  return { found: true, selected: false };
 }
 
 async function fillPartySize(page, partySize) {
@@ -164,11 +164,11 @@ async function fillPartySize(page, partySize) {
     page.locator('select[name*="party" i], select[id*="party" i], select[name*="guest" i], select[id*="guest" i]')
   ]);
 
-  if (!control) return false;
+  if (!control) return { found: false, selected: false };
 
   try {
     await control.selectOption(String(partySize));
-    return true;
+    return { found: true, selected: true };
   } catch (error) {
     try {
       await control.click();
@@ -180,14 +180,14 @@ async function fillPartySize(page, partySize) {
 
       if (option) {
         await option.click();
-        return true;
+        return { found: true, selected: true };
       }
     } catch (secondaryError) {
-      return false;
+      return { found: true, selected: false };
     }
   }
 
-  return false;
+  return { found: true, selected: false };
 }
 
 async function fillPreferredDate(page, preferredDate) {
@@ -198,11 +198,11 @@ async function fillPreferredDate(page, preferredDate) {
     page.locator('input[aria-label*="Date" i]')
   ]);
 
-  if (!dateInput) return false;
+  if (!dateInput) return { found: false, selected: false };
 
   await dateInput.fill(preferredDate);
   await dateInput.dispatchEvent("change").catch(() => {});
-  return true;
+  return { found: true, selected: true };
 }
 
 async function submitSearch(page) {
@@ -211,12 +211,27 @@ async function submitSearch(page) {
     page.locator("button").filter({ hasText: /search|find times|check availability|update search/i })
   ]);
 
-  if (!button) return false;
+  if (!button) return { found: false, clicked: false };
 
   await button.click();
   await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
   await page.waitForTimeout(2_000);
-  return true;
+  return { found: true, clicked: true };
+}
+
+async function collectVisibleDebugInfo(page) {
+  const bodyText = await page.locator("body").innerText().catch(() => "");
+  const compactText = bodyText.replace(/\s+/g, " ").trim();
+  const timeMatches = [...new Set((bodyText.match(/\b\d{1,2}:\d{2}\s?(?:AM|PM)\b/gi) || []).map(time => time.replace(/\s+/g, " ").trim()))].slice(0, 10);
+  const likelyNoResults =
+    /no times available|no reservations available|try another date|try another time|no availability/i.test(bodyText);
+
+  return {
+    url: page.url(),
+    visibleTimes: timeMatches,
+    likelyNoResults,
+    previewText: compactText.slice(0, 500)
+  };
 }
 
 async function collectMatches(page, query) {
@@ -327,31 +342,53 @@ async function checkDisneyDiningAvailability(query) {
     const storageStatePath = builtContext.storageStatePath;
     const page = await context.newPage();
     page.setDefaultTimeout(DEFAULT_TIMEOUT_MS);
+    const diagnostics = {
+      provider,
+      restaurantName: query.restaurantName,
+      preferredDate: query.preferredDate,
+      partySize: query.partySize
+    };
 
     await page.goto(config.availabilityUrl, {
       waitUntil: "domcontentloaded",
       timeout: DEFAULT_TIMEOUT_MS
     });
 
-    await maybeLoginToDisney(page, { email, password });
+    diagnostics.loginAttempted = await maybeLoginToDisney(page, { email, password });
     await page.goto(config.availabilityUrl, {
       waitUntil: "domcontentloaded",
       timeout: DEFAULT_TIMEOUT_MS
     });
 
     await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
-    await fillRestaurant(page, query.restaurantName);
-    await fillPartySize(page, query.partySize);
-    await fillPreferredDate(page, query.preferredDate);
-    await submitSearch(page);
+    diagnostics.restaurantInput = await fillRestaurant(page, query.restaurantName);
+    diagnostics.partySizeInput = await fillPartySize(page, query.partySize);
+    diagnostics.dateInput = await fillPreferredDate(page, query.preferredDate);
+    diagnostics.searchAction = await submitSearch(page);
 
     const matches = await collectMatches(page, query);
+    const debugInfo = await collectVisibleDebugInfo(page);
     await context.storageState({ path: storageStatePath }).catch(() => {});
+
+    const noteParts = [];
+    if (!diagnostics.restaurantInput?.found) noteParts.push("restaurant control not found");
+    if (!diagnostics.partySizeInput?.found) noteParts.push("party size control not found");
+    if (!diagnostics.dateInput?.found) noteParts.push("date control not found");
+    if (!diagnostics.searchAction?.found) noteParts.push("search button not found");
+    if (!matches.length && debugInfo.likelyNoResults) noteParts.push("Disney page reported no availability");
+    if (!matches.length && debugInfo.visibleTimes.length) {
+      noteParts.push(`visible times seen: ${debugInfo.visibleTimes.join(", ")}`);
+    }
 
     return {
       available: matches.length > 0,
       matches,
-      source: "playwright-disney"
+      source: "playwright-disney",
+      note: noteParts.join(" | ") || null,
+      diagnostics: {
+        ...diagnostics,
+        ...debugInfo
+      }
     };
   } catch (error) {
     return {
