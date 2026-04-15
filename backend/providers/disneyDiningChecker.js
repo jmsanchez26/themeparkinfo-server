@@ -312,10 +312,15 @@ async function checkDisneyDiningAvailability(query) {
   let context;
 
   try {
-    browser = await chromium.launch({
-      headless: process.env.PLAYWRIGHT_HEADFUL === "true" ? false : true,
-      channel: process.env.PLAYWRIGHT_CHANNEL || "chromium"
-    });
+    const launchOptions = {
+      headless: process.env.PLAYWRIGHT_HEADFUL === "true" ? false : true
+    };
+
+    if (process.env.PLAYWRIGHT_CHANNEL) {
+      launchOptions.channel = process.env.PLAYWRIGHT_CHANNEL;
+    }
+
+    browser = await chromium.launch(launchOptions);
 
     const builtContext = await buildBrowserContext(browser, provider);
     context = builtContext.context;
