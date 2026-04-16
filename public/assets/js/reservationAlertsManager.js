@@ -98,6 +98,19 @@
     return document.getElementById("reservationRestaurantName");
   }
 
+  function createElement(tagName, className, textContent) {
+    const element = document.createElement(tagName);
+    if (className) {
+      element.className = className;
+    }
+
+    if (textContent !== undefined) {
+      element.textContent = textContent;
+    }
+
+    return element;
+  }
+
   function populateRestaurantOptions(provider, selectedValue = "") {
     const select = getRestaurantSelect();
     if (!select) return;
@@ -105,10 +118,18 @@
     const options = RESTAURANT_OPTIONS[String(provider || "").toLowerCase()] || [];
     const resolvedValue = options.includes(selectedValue) ? selectedValue : "";
 
-    select.innerHTML = [
-      '<option value="">Choose a restaurant</option>',
-      ...options.map(name => `<option value="${name}">${name}</option>`)
-    ].join("");
+    select.innerHTML = "";
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Choose a restaurant";
+    select.appendChild(placeholder);
+
+    options.forEach(name => {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      select.appendChild(option);
+    });
 
     select.value = resolvedValue;
   }
@@ -175,38 +196,70 @@
       }
 
       panel.hidden = false;
-      list.innerHTML = states.map(state => `
-        <article class="reservation-verification-item">
-          <div class="reservation-verification-meta">
-            <span class="alert-chip park">${formatVerificationProvider(state.provider)}</span>
-            <span class="alert-chip ${state.status === "submitted" ? "status" : "pending"}">
-              ${state.status === "submitted" ? "Code saved" : "Code needed"}
-            </span>
-          </div>
-          <div>
-            <h4>${formatVerificationProvider(state.provider)}</h4>
-            <p>${state.message || "Disney is asking for a security code before the worker can continue."}</p>
-          </div>
-          ${state.promptText ? `<div class="reservation-verification-hint">${state.promptText}</div>` : ""}
-          <form class="reservation-verification-form" data-provider="${state.provider}">
-            <input
-              type="text"
-              inputmode="numeric"
-              autocomplete="one-time-code"
-              maxlength="12"
-              placeholder="Enter Disney security code"
-              value=""
-              aria-label="${formatVerificationProvider(state.provider)} security code"
-            />
-            <button type="submit">${state.status === "submitted" ? "Update Code" : "Send Code"}</button>
-          </form>
-          <div class="reservation-verification-hint">
-            ${state.status === "submitted"
+      list.replaceChildren();
+
+      states.forEach(state => {
+        const item = createElement("article", "reservation-verification-item");
+        const meta = createElement("div", "reservation-verification-meta");
+        meta.appendChild(createElement("span", "alert-chip park", formatVerificationProvider(state.provider)));
+        meta.appendChild(
+          createElement(
+            "span",
+            `alert-chip ${state.status === "submitted" ? "status" : "pending"}`,
+            state.status === "submitted" ? "Code saved" : "Code needed"
+          )
+        );
+
+        const copyWrap = document.createElement("div");
+        copyWrap.appendChild(createElement("h4", "", formatVerificationProvider(state.provider)));
+        copyWrap.appendChild(
+          createElement(
+            "p",
+            "",
+            state.message || "Disney is asking for a security code before the worker can continue."
+          )
+        );
+
+        item.appendChild(meta);
+        item.appendChild(copyWrap);
+
+        if (state.promptText) {
+          item.appendChild(createElement("div", "reservation-verification-hint", state.promptText));
+        }
+
+        const form = createElement("form", "reservation-verification-form");
+        form.dataset.provider = state.provider;
+
+        const input = document.createElement("input");
+        input.type = "text";
+        input.inputMode = "numeric";
+        input.autocomplete = "one-time-code";
+        input.maxLength = 12;
+        input.placeholder = "Enter Disney security code";
+        input.setAttribute("aria-label", `${formatVerificationProvider(state.provider)} security code`);
+
+        const button = createElement(
+          "button",
+          "",
+          state.status === "submitted" ? "Update Code" : "Send Code"
+        );
+        button.type = "submit";
+
+        form.appendChild(input);
+        form.appendChild(button);
+        item.appendChild(form);
+        item.appendChild(
+          createElement(
+            "div",
+            "reservation-verification-hint",
+            state.status === "submitted"
               ? "Your latest code is saved. If Disney sends a newer one, enter it here before the next worker retry."
-              : "Enter the latest security code from the Disney app here."}
-          </div>
-        </article>
-      `).join("");
+              : "Enter the latest security code from the Disney app here."
+          )
+        );
+
+        list.appendChild(item);
+      });
     } catch (error) {
       console.error("Disney verification state load failed:", error);
       panel.hidden = true;
@@ -255,7 +308,10 @@
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ code })
+      body: JSON.stringify({
+        code,
+        ownerKey: getOwnerKey()
+      })
     });
 
     if (!response.ok) {

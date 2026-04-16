@@ -44,6 +44,7 @@ const pushState = {
   alerts: [],
   reservationAlerts: [],
   disneyVerification: {},
+  disneyVerificationCodes: {},
   messaging: null
 };
 const waitHistoryState = {
@@ -473,7 +474,7 @@ function buildDisneyVerificationSnapshot(provider, includeCode = false) {
     promptText: entry.promptText || "",
     updatedAt: entry.updatedAt || null,
     submittedAt: entry.submittedAt || null,
-    code: includeCode ? entry.code || "" : undefined
+    code: includeCode ? pushState.disneyVerificationCodes[provider] || "" : undefined
   };
 }
 
@@ -836,9 +837,9 @@ app.post("/api/reservation-worker/disney-verification/:provider/request", async 
     message: String(req.body.message || "").trim(),
     promptText: String(req.body.promptText || "").trim(),
     updatedAt: new Date().toISOString(),
-    submittedAt: null,
-    code: ""
+    submittedAt: null
   };
+  delete pushState.disneyVerificationCodes[provider];
 
   await persistDisneyVerification();
 
@@ -851,6 +852,7 @@ app.post("/api/reservation-worker/disney-verification/:provider/request", async 
 app.post("/api/reservation-worker/disney-verification/:provider/code", async (req, res) => {
   const provider = normalizeReservationProvider(req.params.provider);
   const code = String(req.body.code || "").trim();
+  const ownerKey = String(req.body.ownerKey || "").trim();
 
   if (!["wdw", "disneyland"].includes(provider)) {
     return res.status(400).json({
@@ -866,14 +868,34 @@ app.post("/api/reservation-worker/disney-verification/:provider/code", async (re
     });
   }
 
+  if (!ownerKey) {
+    return res.status(400).json({
+      error: true,
+      message: "Owner key is required"
+    });
+  }
+
+  const ownsProviderAlert = pushState.reservationAlerts.some(alert =>
+    alert &&
+    alert.ownerKey === ownerKey &&
+    alert.provider === provider
+  );
+
+  if (!ownsProviderAlert) {
+    return res.status(403).json({
+      error: true,
+      message: "This device does not have a Disney reservation alert for that provider"
+    });
+  }
+
   const existing = pushState.disneyVerification[provider] || {};
   pushState.disneyVerification[provider] = {
     ...existing,
     status: "submitted",
-    code,
     updatedAt: new Date().toISOString(),
     submittedAt: new Date().toISOString()
   };
+  pushState.disneyVerificationCodes[provider] = code;
 
   await persistDisneyVerification();
 
@@ -900,6 +922,7 @@ app.post("/api/reservation-worker/disney-verification/:provider/clear", async (r
   }
 
   delete pushState.disneyVerification[provider];
+  delete pushState.disneyVerificationCodes[provider];
   await persistDisneyVerification();
 
   return res.json({

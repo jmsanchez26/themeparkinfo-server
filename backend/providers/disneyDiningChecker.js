@@ -141,6 +141,15 @@ async function clearVerificationState(provider) {
   });
 }
 
+async function consumeSubmittedVerificationCode(provider) {
+  const state = await loadVerificationState(provider).catch(() => null);
+  if (!state?.code) {
+    return "";
+  }
+
+  return String(state.code || "").trim();
+}
+
 async function waitForLoginFrame(page) {
   for (let index = 0; index < 40; index += 1) {
     const frame = page
@@ -245,8 +254,9 @@ async function maybeHandleVerificationChallenge(page, provider) {
 
   const verificationState = await loadVerificationState(provider).catch(() => null);
 
-  if (verificationState?.status === "submitted" && verificationState.code) {
-    const submitted = await applyVerificationCode(frame, verificationState.code);
+  if (verificationState?.status === "submitted") {
+    const code = await consumeSubmittedVerificationCode(provider).catch(() => "");
+    const submitted = code ? await applyVerificationCode(frame, code) : false;
 
     if (submitted) {
       await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
@@ -268,6 +278,7 @@ async function maybeHandleVerificationChallenge(page, provider) {
         "Disney still needs a fresh security code. Enter the newest code from the Disney app.",
         nextChallenge.promptText || challenge.promptText
       ).catch(() => {});
+      await clearVerificationState(provider).catch(() => {});
 
       return {
         challengeRequired: true,
