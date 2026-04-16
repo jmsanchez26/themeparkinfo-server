@@ -87,6 +87,16 @@ async function loadReservationAlerts() {
   return Array.isArray(parsed) ? parsed : [];
 }
 
+async function loadDisneyVerificationStates() {
+  if (!shouldUseApiBackedAlerts()) {
+    return [];
+  }
+
+  const payload = await apiRequest("/api/reservation-worker/disney-verification");
+  const parsed = payload?.data;
+  return Array.isArray(parsed) ? parsed : [];
+}
+
 async function persistReservationAlerts(alerts) {
   if (shouldUseApiBackedAlerts()) {
     const safeAlerts = Array.isArray(alerts) ? alerts : [];
@@ -189,6 +199,7 @@ module.exports = {
   RESERVATION_ALERTS_FILE,
   RESERVATION_QUERY_CACHE_FILE,
   loadReservationAlerts,
+  loadDisneyVerificationStates,
   persistReservationAlerts,
   loadReservationQueryCache,
   persistReservationQueryCache,

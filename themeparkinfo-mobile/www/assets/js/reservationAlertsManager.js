@@ -124,6 +124,15 @@
     return labels[String(provider || "").toLowerCase()] || provider || "Unknown";
   }
 
+  function formatVerificationProvider(provider) {
+    const labels = {
+      wdw: "Walt Disney World",
+      disneyland: "Disneyland Resort"
+    };
+
+    return labels[String(provider || "").toLowerCase()] || provider || "Disney";
+  }
+
   function formatDate(value) {
     if (!value) return "Not set";
     const parsed = new Date(`${value}T00:00:00`);
@@ -139,6 +148,70 @@
   function scheduleRefresh(delayMs = 15000) {
     clearTimeout(refreshTimerId);
     refreshTimerId = setTimeout(() => loadReservationAlerts({ silent: true }), delayMs);
+  }
+
+  async function loadDisneyVerificationState() {
+    const panel = document.getElementById("disneyVerificationPanel");
+    const list = document.getElementById("disneyVerificationList");
+    if (!panel || !list) return;
+
+    try {
+      const response = await fetch(`${baseUrl}/api/reservation-worker/disney-verification`, {
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load Disney verification state (${response.status})`);
+      }
+
+      const payload = await response.json();
+      const states = (Array.isArray(payload.data) ? payload.data : [])
+        .filter(state => state && ["required", "submitted"].includes(String(state.status || "").toLowerCase()));
+
+      if (!states.length) {
+        panel.hidden = true;
+        list.innerHTML = "";
+        return;
+      }
+
+      panel.hidden = false;
+      list.innerHTML = states.map(state => `
+        <article class="reservation-verification-item">
+          <div class="reservation-verification-meta">
+            <span class="alert-chip park">${formatVerificationProvider(state.provider)}</span>
+            <span class="alert-chip ${state.status === "submitted" ? "status" : "pending"}">
+              ${state.status === "submitted" ? "Code saved" : "Code needed"}
+            </span>
+          </div>
+          <div>
+            <h4>${formatVerificationProvider(state.provider)}</h4>
+            <p>${state.message || "Disney is asking for a security code before the worker can continue."}</p>
+          </div>
+          ${state.promptText ? `<div class="reservation-verification-hint">${state.promptText}</div>` : ""}
+          <form class="reservation-verification-form" data-provider="${state.provider}">
+            <input
+              type="text"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              maxlength="12"
+              placeholder="Enter Disney security code"
+              value=""
+              aria-label="${formatVerificationProvider(state.provider)} security code"
+            />
+            <button type="submit">${state.status === "submitted" ? "Update Code" : "Send Code"}</button>
+          </form>
+          <div class="reservation-verification-hint">
+            ${state.status === "submitted"
+              ? "Your latest code is saved. If Disney sends a newer one, enter it here before the next worker retry."
+              : "Enter the latest security code from the Disney app here."}
+          </div>
+        </article>
+      `).join("");
+    } catch (error) {
+      console.error("Disney verification state load failed:", error);
+      panel.hidden = true;
+      list.innerHTML = "";
+    }
   }
 
   async function loadReservationAlerts(options = {}) {
@@ -162,6 +235,7 @@
       const payload = await response.json();
       const alerts = Array.isArray(payload.data) ? payload.data : [];
       renderReservationAlerts(alerts);
+      await loadDisneyVerificationState();
       status.textContent = alerts.length
         ? `${alerts.length} restaurant alert${alerts.length === 1 ? "" : "s"} saved`
         : "No restaurant alerts saved yet.";
@@ -170,7 +244,22 @@
       console.error("Restaurant alerts load failed:", error);
       list.innerHTML = `<div class="alerts-empty">Could not load restaurant alerts right now.</div>`;
       status.textContent = error.message;
+      await loadDisneyVerificationState();
       scheduleRefresh(5000);
+    }
+  }
+
+  async function submitDisneyVerificationCode(provider, code) {
+    const response = await fetch(`${baseUrl}/api/reservation-worker/disney-verification/${encodeURIComponent(provider)}/code`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ code })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to save Disney security code (${response.status})`);
     }
   }
 
@@ -343,6 +432,35 @@
       console.error("Restaurant alert action failed:", error);
       status.textContent = error.message;
       button.disabled = false;
+    }
+  });
+
+  document.addEventListener("submit", async event => {
+    const verificationForm = event.target.closest(".reservation-verification-form");
+    if (!verificationForm) return;
+
+    event.preventDefault();
+    const provider = verificationForm.dataset.provider;
+    const input = verificationForm.querySelector("input");
+    const status = document.getElementById("reservationAlertsStatus");
+    const code = String(input?.value || "").trim();
+
+    if (!provider || !code) {
+      status.textContent = "Enter the Disney security code first.";
+      return;
+    }
+
+    try {
+      status.textContent = "Saving Disney security code...";
+      verificationForm.querySelector("button")?.setAttribute("disabled", "disabled");
+      await submitDisneyVerificationCode(provider, code);
+      status.textContent = "Disney security code saved. The worker will use it on the next retry.";
+      await loadDisneyVerificationState();
+    } catch (error) {
+      console.error("Save Disney security code failed:", error);
+      status.textContent = error.message;
+    } finally {
+      verificationForm.querySelector("button")?.removeAttribute("disabled");
     }
   });
 

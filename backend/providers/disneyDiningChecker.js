@@ -3,6 +3,8 @@ const path = require("path");
 const { chromium } = require("playwright");
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.DISNEY_CHECK_TIMEOUT_MS || 90_000);
+const RESERVATION_API_BASE_URL = String(process.env.RESERVATION_API_BASE_URL || "").trim().replace(/\/+$/, "");
+const RESERVATION_WORKER_SHARED_SECRET = String(process.env.RESERVATION_WORKER_SHARED_SECRET || "").trim();
 const USER_AGENT =
   process.env.PLAYWRIGHT_USER_AGENT ||
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36";
@@ -75,6 +77,70 @@ async function fileExists(filePath) {
   }
 }
 
+async function ensureDir(dirPath) {
+  await fs.mkdir(dirPath, { recursive: true });
+}
+
+function getWorkerHeaders() {
+  const headers = {
+    "Content-Type": "application/json"
+  };
+
+  if (RESERVATION_WORKER_SHARED_SECRET) {
+    headers["x-reservation-worker-secret"] = RESERVATION_WORKER_SHARED_SECRET;
+  }
+
+  return headers;
+}
+
+async function workerApiRequest(route, options = {}) {
+  if (!RESERVATION_API_BASE_URL) {
+    return null;
+  }
+
+  const response = await fetch(`${RESERVATION_API_BASE_URL}${route}`, {
+    ...options,
+    headers: {
+      ...getWorkerHeaders(),
+      ...(options.headers || {})
+    }
+  });
+
+  if (!response.ok) {
+    const message = await response.text().catch(() => "");
+    throw new Error(`Disney worker API request failed (${response.status}) ${message}`.trim());
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    return null;
+  }
+
+  return response.json();
+}
+
+async function loadVerificationState(provider) {
+  const payload = await workerApiRequest(`/api/reservation-worker/disney-verification?provider=${encodeURIComponent(provider)}`);
+  return payload?.data || null;
+}
+
+async function setVerificationRequired(provider, message, promptText) {
+  await workerApiRequest(`/api/reservation-worker/disney-verification/${encodeURIComponent(provider)}/request`, {
+    method: "POST",
+    body: JSON.stringify({
+      status: "required",
+      message,
+      promptText
+    })
+  });
+}
+
+async function clearVerificationState(provider) {
+  await workerApiRequest(`/api/reservation-worker/disney-verification/${encodeURIComponent(provider)}/clear`, {
+    method: "POST"
+  });
+}
+
 async function waitForLoginFrame(page) {
   for (let index = 0; index < 40; index += 1) {
     const frame = page
@@ -109,6 +175,117 @@ async function maybeLoginToDisney(page, credentials) {
   await page.waitForTimeout(3_000);
 
   return true;
+}
+
+async function detectVerificationPrompt(frame) {
+  if (!frame) {
+    return {
+      required: false,
+      promptText: ""
+    };
+  }
+
+  const bodyText = await frame.locator("body").innerText().catch(() => "");
+  const compact = bodyText.replace(/\s+/g, " ").trim();
+  const required = /security code|verification code|one-time code|one time code|6-digit code|enter the code/i.test(compact);
+
+  return {
+    required,
+    promptText: compact.slice(0, 500)
+  };
+}
+
+async function applyVerificationCode(frame, code) {
+  const digits = String(code || "").replace(/\D/g, "");
+  if (!digits) return false;
+
+  const multiInputs = frame.locator('input[maxlength="1"], input[inputmode="numeric"], input[autocomplete*="one-time-code" i]');
+  const multiCount = await multiInputs.count().catch(() => 0);
+
+  if (multiCount >= 4) {
+    for (let index = 0; index < Math.min(multiCount, digits.length); index += 1) {
+      await multiInputs.nth(index).fill(digits[index]).catch(() => {});
+    }
+  } else {
+    const singleInput = await selectFirstVisible([
+      frame.locator('input[autocomplete*="one-time-code" i]'),
+      frame.locator('input[placeholder*="code" i]'),
+      frame.locator('input[aria-label*="code" i]'),
+      frame.locator('input[type="tel"]'),
+      frame.locator('input[inputmode="numeric"]')
+    ]);
+
+    if (!singleInput) return false;
+    await singleInput.fill(digits).catch(() => {});
+  }
+
+  const submitButton = await selectFirstVisible([
+    frame.getByRole("button", { name: /continue|submit|verify|done|log in/i }),
+    frame.locator("button").filter({ hasText: /continue|submit|verify|done|log in/i })
+  ]);
+
+  if (!submitButton) {
+    return false;
+  }
+
+  await submitButton.click().catch(() => {});
+  return true;
+}
+
+async function maybeHandleVerificationChallenge(page, provider) {
+  const frame = await waitForLoginFrame(page);
+  const challenge = await detectVerificationPrompt(frame);
+
+  if (!challenge.required) {
+    return {
+      challengeRequired: false,
+      note: ""
+    };
+  }
+
+  const verificationState = await loadVerificationState(provider).catch(() => null);
+
+  if (verificationState?.status === "submitted" && verificationState.code) {
+    const submitted = await applyVerificationCode(frame, verificationState.code);
+
+    if (submitted) {
+      await page.waitForLoadState("networkidle", { timeout: 30_000 }).catch(() => {});
+      await page.waitForTimeout(3_000);
+
+      const nextFrame = await waitForLoginFrame(page);
+      const nextChallenge = await detectVerificationPrompt(nextFrame);
+
+      if (!nextChallenge.required) {
+        await clearVerificationState(provider).catch(() => {});
+        return {
+          challengeRequired: false,
+          note: "Disney security code accepted."
+        };
+      }
+
+      await setVerificationRequired(
+        provider,
+        "Disney still needs a fresh security code. Enter the newest code from the Disney app.",
+        nextChallenge.promptText || challenge.promptText
+      ).catch(() => {});
+
+      return {
+        challengeRequired: true,
+        note: "Disney security code was requested again after submitting a code."
+      };
+    }
+  }
+
+  await setVerificationRequired(
+    provider,
+    "Disney sent a security code. Enter it on the Restaurant Alerts page so the worker can continue.",
+    challenge.promptText
+  ).catch(() => {});
+
+  return {
+    challengeRequired: true,
+    note: "Disney security code required."
+  };
 }
 
 async function selectFirstVisible(locatorList) {
@@ -283,19 +460,15 @@ async function collectMatches(page, query) {
   return matches;
 }
 
-async function buildBrowserContext(browser, provider) {
-  const storageStatePath =
-    process.env.DISNEY_PLAYWRIGHT_STORAGE_STATE ||
-    path.join(__dirname, "../data", `disney-${provider}-storage-state.json`);
+function buildPersistentProfilePath(provider) {
+  const configuredBase = String(process.env.DISNEY_PLAYWRIGHT_USER_DATA_DIR || "").trim();
+  if (configuredBase) {
+    return configuredBase.includes("<provider>")
+      ? configuredBase.replace(/<provider>/gi, provider)
+      : path.join(configuredBase, provider);
+  }
 
-  const contextOptions = {
-    userAgent: USER_AGENT,
-    viewport: { width: 1440, height: 1100 },
-    storageState: (await fileExists(storageStatePath)) ? storageStatePath : undefined
-  };
-
-  const context = await browser.newContext(contextOptions);
-  return { context, storageStatePath };
+  return path.join(__dirname, "../data", `disney-${provider}-profile`);
 }
 
 async function checkDisneyDiningAvailability(query) {
@@ -323,30 +496,30 @@ async function checkDisneyDiningAvailability(query) {
     };
   }
 
-  let browser;
   let context;
 
   try {
     const launchOptions = {
-      headless: process.env.PLAYWRIGHT_HEADFUL === "true" ? false : true
+      headless: process.env.PLAYWRIGHT_HEADFUL === "true" ? false : true,
+      userAgent: USER_AGENT,
+      viewport: { width: 1440, height: 1100 }
     };
 
     if (process.env.PLAYWRIGHT_CHANNEL) {
       launchOptions.channel = process.env.PLAYWRIGHT_CHANNEL;
     }
 
-    browser = await chromium.launch(launchOptions);
-
-    const builtContext = await buildBrowserContext(browser, provider);
-    context = builtContext.context;
-    const storageStatePath = builtContext.storageStatePath;
-    const page = await context.newPage();
+    const userDataDir = buildPersistentProfilePath(provider);
+    await ensureDir(userDataDir);
+    context = await chromium.launchPersistentContext(userDataDir, launchOptions);
+    const page = context.pages()[0] || await context.newPage();
     page.setDefaultTimeout(DEFAULT_TIMEOUT_MS);
     const diagnostics = {
       provider,
       restaurantName: query.restaurantName,
       preferredDate: query.preferredDate,
-      partySize: query.partySize
+      partySize: query.partySize,
+      userDataDir
     };
 
     await page.goto(config.availabilityUrl, {
@@ -355,6 +528,19 @@ async function checkDisneyDiningAvailability(query) {
     });
 
     diagnostics.loginAttempted = await maybeLoginToDisney(page, { email, password });
+    const verificationResult = await maybeHandleVerificationChallenge(page, provider);
+    diagnostics.verificationResult = verificationResult;
+
+    if (verificationResult.challengeRequired) {
+      return {
+        available: false,
+        matches: [],
+        source: "playwright-disney-verification-required",
+        note: verificationResult.note,
+        diagnostics
+      };
+    }
+
     await page.goto(config.availabilityUrl, {
       waitUntil: "domcontentloaded",
       timeout: DEFAULT_TIMEOUT_MS
@@ -368,7 +554,6 @@ async function checkDisneyDiningAvailability(query) {
 
     const matches = await collectMatches(page, query);
     const debugInfo = await collectVisibleDebugInfo(page);
-    await context.storageState({ path: storageStatePath }).catch(() => {});
 
     const noteParts = [];
     if (!diagnostics.restaurantInput?.found) noteParts.push("restaurant control not found");
@@ -399,7 +584,6 @@ async function checkDisneyDiningAvailability(query) {
     };
   } finally {
     await context?.close().catch(() => {});
-    await browser?.close().catch(() => {});
   }
 }
 

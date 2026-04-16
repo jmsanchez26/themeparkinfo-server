@@ -24,7 +24,7 @@ The worker architecture is live.
 - `providers/disneyDiningChecker.js`
   - now uses Playwright to open the Disney dining availability flow
   - logs in through the Disney OneID iframe using environment credentials
-  - reuses a saved browser storage state when available
+  - reuses a persistent browser profile between runs when available
   - searches the page for matching reservation times inside the requested window
 
 - `providers/universalDiningChecker.js`
@@ -80,8 +80,12 @@ npm run start:reservation-worker
 - `DISNEY_LOGIN_PASSWORD`
   - required for Disney reservation checks
 - `DISNEY_PLAYWRIGHT_STORAGE_STATE`
-  - optional path for the saved Disney login session
-  - default: `backend/data/disney-<provider>-storage-state.json`
+  - old session-state option
+  - no longer the preferred path
+- `DISNEY_PLAYWRIGHT_USER_DATA_DIR`
+  - optional base path for the persistent Disney browser profile
+  - if set, the checker will create one profile per provider under this path
+  - example: `/opt/render/project/src/backend/data/disney-profiles`
 - `DISNEY_CHECK_TIMEOUT_MS`
   - optional timeout override for the Disney checker
 - `PLAYWRIGHT_CHANNEL`
@@ -89,6 +93,12 @@ npm run start:reservation-worker
   - default: `chromium`
 - `PLAYWRIGHT_HEADFUL`
   - set to `true` if you want to watch the Disney checker in a visible browser while debugging
+
+## Session note
+
+If Disney is sending a security code on every worker run, a persistent browser profile usually helps more than a one-off storage state file.
+
+If you want that browser profile to survive Render restarts and redeploys, attach a persistent disk to the worker and point `DISNEY_PLAYWRIGHT_USER_DATA_DIR` at a folder on that disk.
 
 ## Next implementation step
 

@@ -1,5 +1,6 @@
 const {
   loadReservationAlerts,
+  loadDisneyVerificationStates,
   persistReservationAlerts,
   loadReservationQueryCache,
   persistReservationQueryCache,
@@ -11,6 +12,7 @@ const { checkDisneyDiningAvailability } = require("../providers/disneyDiningChec
 const { checkUniversalDiningAvailability } = require("../providers/universalDiningChecker");
 
 const RESERVATION_CHECK_INTERVAL_MS = Number(process.env.RESERVATION_CHECK_INTERVAL_MS || 15 * 60 * 1000);
+const RESERVATION_VERIFICATION_RETRY_INTERVAL_MS = Number(process.env.RESERVATION_VERIFICATION_RETRY_INTERVAL_MS || 60 * 1000);
 const RESERVATION_NOTIFICATION_COOLDOWN_MS = Number(process.env.RESERVATION_NOTIFICATION_COOLDOWN_MS || 6 * 60 * 60 * 1000);
 const RESERVATION_WORKER_CONCURRENCY = Math.max(1, Number(process.env.RESERVATION_WORKER_CONCURRENCY || 3));
 
@@ -66,13 +68,19 @@ async function runReservationWorkerCycle({ messaging, log = console } = {}) {
   const now = new Date();
   const nowIso = now.toISOString();
   const nowMs = now.getTime();
+  const verificationStates = await loadDisneyVerificationStates().catch(() => []);
 
   if (!groupedQueries.length) {
     log.log("Reservation worker: no enabled alerts to check.");
+    const activeVerificationStates = verificationStates.filter(
+      state => state && ["required", "submitted"].includes(String(state.status || "").toLowerCase())
+    ).length;
+
     return {
       checkedQueries: 0,
       sentNotifications: 0,
-      matchedQueries: 0
+      matchedQueries: 0,
+      activeVerificationStates
     };
   }
 
@@ -185,15 +193,31 @@ async function runReservationWorkerCycle({ messaging, log = console } = {}) {
   await persistReservationAlerts(updatedAlerts);
   await persistReservationQueryCache(queryCache);
 
+  const latestVerificationStates = await loadDisneyVerificationStates().catch(() => verificationStates);
+  const activeVerificationStates = latestVerificationStates.filter(
+    state => state && ["required", "submitted"].includes(String(state.status || "").toLowerCase())
+  ).length;
+
   return {
     checkedQueries: groupedQueries.length,
     sentNotifications: sendResult.sent,
-    matchedQueries
+    matchedQueries,
+    activeVerificationStates
   };
 }
 
 function startReservationWorker({ messaging, log = console } = {}) {
   let isRunning = false;
+  let timeoutId = null;
+
+  function scheduleNextRun(delayMs) {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+      runCycle().catch(error => {
+        log.error("Reservation worker scheduled cycle failed:", error);
+      });
+    }, delayMs);
+  }
 
   async function runCycle() {
     if (isRunning) {
@@ -204,11 +228,20 @@ function startReservationWorker({ messaging, log = console } = {}) {
     isRunning = true;
     try {
       const result = await runReservationWorkerCycle({ messaging, log });
+      const nextDelay = result.activeVerificationStates > 0
+        ? RESERVATION_VERIFICATION_RETRY_INTERVAL_MS
+        : RESERVATION_CHECK_INTERVAL_MS;
+
       log.log(
         `Reservation worker: checked ${result.checkedQueries} grouped queries, matched ${result.matchedQueries}, sent ${result.sentNotifications} notifications.`
       );
+      if (result.activeVerificationStates > 0) {
+        log.log(`Reservation worker: Disney verification is pending, retrying in ${Math.round(nextDelay / 1000)} seconds.`);
+      }
+      scheduleNextRun(nextDelay);
     } catch (error) {
       log.error("Reservation worker cycle failed:", error);
+      scheduleNextRun(RESERVATION_CHECK_INTERVAL_MS);
     } finally {
       isRunning = false;
     }
@@ -216,17 +249,19 @@ function startReservationWorker({ messaging, log = console } = {}) {
 
   runCycle().catch(error => {
     log.error("Reservation worker initial cycle failed:", error);
+    scheduleNextRun(RESERVATION_CHECK_INTERVAL_MS);
   });
 
-  return setInterval(() => {
-    runCycle().catch(error => {
-      log.error("Reservation worker scheduled cycle failed:", error);
-    });
-  }, RESERVATION_CHECK_INTERVAL_MS);
+  return {
+    stop() {
+      clearTimeout(timeoutId);
+    }
+  };
 }
 
 module.exports = {
   RESERVATION_CHECK_INTERVAL_MS,
+  RESERVATION_VERIFICATION_RETRY_INTERVAL_MS,
   runReservationWorkerCycle,
   startReservationWorker
 };

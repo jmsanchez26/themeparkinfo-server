@@ -16,6 +16,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const ALERTS_FILE = path.join(__dirname, "data", "alerts.json");
 const RESERVATION_ALERTS_FILE = path.join(__dirname, "data", "reservation-alerts.json");
+const DISNEY_VERIFICATION_FILE = path.join(__dirname, "data", "disney-verification.json");
 const UNIVERSAL_WAIT_HISTORY_FILE = path.join(__dirname, "data", "universal-wait-history.json");
 const UNIVERSAL_CACHE_KEYS = new Set(["usorlando", "hollywood"]);
 const WAIT_HISTORY_RETENTION_DAYS = 14;
@@ -42,6 +43,7 @@ const cache = {};
 const pushState = {
   alerts: [],
   reservationAlerts: [],
+  disneyVerification: {},
   messaging: null
 };
 const waitHistoryState = {
@@ -102,6 +104,16 @@ async function ensureWaitHistoryFile() {
   }
 }
 
+async function ensureDisneyVerificationFile() {
+  await fs.mkdir(path.dirname(DISNEY_VERIFICATION_FILE), { recursive: true });
+
+  try {
+    await fs.access(DISNEY_VERIFICATION_FILE);
+  } catch (error) {
+    await fs.writeFile(DISNEY_VERIFICATION_FILE, "{}", "utf8");
+  }
+}
+
 async function loadAlerts() {
   await ensureAlertsFile();
 
@@ -128,6 +140,19 @@ async function loadReservationAlerts() {
   }
 }
 
+async function loadDisneyVerification() {
+  await ensureDisneyVerificationFile();
+
+  try {
+    const raw = await fs.readFile(DISNEY_VERIFICATION_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    pushState.disneyVerification = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch (error) {
+    console.error("Failed to load Disney verification state:", error.message);
+    pushState.disneyVerification = {};
+  }
+}
+
 async function persistAlerts() {
   await ensureAlertsFile();
   await fs.writeFile(ALERTS_FILE, JSON.stringify(pushState.alerts, null, 2), "utf8");
@@ -136,6 +161,11 @@ async function persistAlerts() {
 async function persistReservationAlerts() {
   await ensureReservationAlertsFile();
   await fs.writeFile(RESERVATION_ALERTS_FILE, JSON.stringify(pushState.reservationAlerts, null, 2), "utf8");
+}
+
+async function persistDisneyVerification() {
+  await ensureDisneyVerificationFile();
+  await fs.writeFile(DISNEY_VERIFICATION_FILE, JSON.stringify(pushState.disneyVerification, null, 2), "utf8");
 }
 
 async function loadWaitHistory() {
@@ -430,6 +460,27 @@ function buildReservationAlertSnapshot(alert) {
     lastCheckedAt: alert.lastCheckedAt || null,
     lastMatchAt: alert.lastMatchAt || null
   };
+}
+
+function buildDisneyVerificationSnapshot(provider, includeCode = false) {
+  const entry = pushState.disneyVerification[provider];
+  if (!entry) return null;
+
+  return {
+    provider,
+    status: entry.status || "required",
+    message: entry.message || "",
+    promptText: entry.promptText || "",
+    updatedAt: entry.updatedAt || null,
+    submittedAt: entry.submittedAt || null,
+    code: includeCode ? entry.code || "" : undefined
+  };
+}
+
+function sortDisneyVerificationStates(includeCode = false) {
+  return ["wdw", "disneyland"]
+    .map(provider => buildDisneyVerificationSnapshot(provider, includeCode))
+    .filter(Boolean);
 }
 
 function sortReservationAlerts(alerts) {
@@ -749,6 +800,113 @@ app.get("/api/reservation-alerts", (req, res) => {
   });
 });
 
+app.get("/api/reservation-worker/disney-verification", (req, res) => {
+  const provider = normalizeReservationProvider(req.query.provider);
+  const includeCode = isAuthorizedReservationWorkerRequest(req);
+
+  if (provider) {
+    return res.json({
+      data: buildDisneyVerificationSnapshot(provider, includeCode)
+    });
+  }
+
+  return res.json({
+    data: sortDisneyVerificationStates(includeCode)
+  });
+});
+
+app.post("/api/reservation-worker/disney-verification/:provider/request", async (req, res) => {
+  if (!isAuthorizedReservationWorkerRequest(req)) {
+    return res.status(403).json({
+      error: true,
+      message: "Unauthorized worker request"
+    });
+  }
+
+  const provider = normalizeReservationProvider(req.params.provider);
+  if (!["wdw", "disneyland"].includes(provider)) {
+    return res.status(400).json({
+      error: true,
+      message: "Invalid Disney provider"
+    });
+  }
+
+  pushState.disneyVerification[provider] = {
+    status: String(req.body.status || "required").trim() || "required",
+    message: String(req.body.message || "").trim(),
+    promptText: String(req.body.promptText || "").trim(),
+    updatedAt: new Date().toISOString(),
+    submittedAt: null,
+    code: ""
+  };
+
+  await persistDisneyVerification();
+
+  return res.json({
+    success: true,
+    data: buildDisneyVerificationSnapshot(provider, false)
+  });
+});
+
+app.post("/api/reservation-worker/disney-verification/:provider/code", async (req, res) => {
+  const provider = normalizeReservationProvider(req.params.provider);
+  const code = String(req.body.code || "").trim();
+
+  if (!["wdw", "disneyland"].includes(provider)) {
+    return res.status(400).json({
+      error: true,
+      message: "Invalid Disney provider"
+    });
+  }
+
+  if (!code) {
+    return res.status(400).json({
+      error: true,
+      message: "Verification code is required"
+    });
+  }
+
+  const existing = pushState.disneyVerification[provider] || {};
+  pushState.disneyVerification[provider] = {
+    ...existing,
+    status: "submitted",
+    code,
+    updatedAt: new Date().toISOString(),
+    submittedAt: new Date().toISOString()
+  };
+
+  await persistDisneyVerification();
+
+  return res.json({
+    success: true,
+    data: buildDisneyVerificationSnapshot(provider, false)
+  });
+});
+
+app.post("/api/reservation-worker/disney-verification/:provider/clear", async (req, res) => {
+  if (!isAuthorizedReservationWorkerRequest(req)) {
+    return res.status(403).json({
+      error: true,
+      message: "Unauthorized worker request"
+    });
+  }
+
+  const provider = normalizeReservationProvider(req.params.provider);
+  if (!["wdw", "disneyland"].includes(provider)) {
+    return res.status(400).json({
+      error: true,
+      message: "Invalid Disney provider"
+    });
+  }
+
+  delete pushState.disneyVerification[provider];
+  await persistDisneyVerification();
+
+  return res.json({
+    success: true
+  });
+});
+
 app.patch("/api/reservation-alerts/:id", async (req, res) => {
   const alertId = String(req.params.id || "").trim();
   const ownerKey = String(req.body.ownerKey || "").trim();
@@ -981,6 +1139,7 @@ async function startServer() {
   pushState.messaging = initializeFirebaseMessaging();
   await loadAlerts();
   await loadReservationAlerts();
+  await loadDisneyVerification();
   await loadWaitHistory();
   await updateCache();
 
