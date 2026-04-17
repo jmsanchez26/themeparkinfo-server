@@ -3,6 +3,7 @@
  */
 const GLOBAL_ALERTS_PAGE_PATH = "/pages/alerts.html";
 let notificationRoutingAttached = false;
+let mobileInputScrollAttached = false;
 
 function loadSiteComponents() {
   const headerPlaceholder = document.getElementById('header-placeholder');
@@ -66,7 +67,57 @@ async function attachGlobalNotificationRouting() {
   notificationRoutingAttached = true;
 }
 
+function isTextInput(element) {
+  if (!element || !(element instanceof HTMLElement)) return false;
+
+  if (element.matches("textarea, select")) {
+    return true;
+  }
+
+  if (!element.matches("input")) {
+    return false;
+  }
+
+  const type = String(element.getAttribute("type") || "text").toLowerCase();
+  return !["checkbox", "radio", "range", "button", "submit", "reset", "color", "file", "hidden"].includes(type);
+}
+
+function scrollFocusedInputIntoView(target) {
+  const footer = document.querySelector(".site-footer");
+  const footerHeight = footer?.offsetHeight || 0;
+  const extraOffset = 20;
+
+  window.setTimeout(() => {
+    target.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+      inline: "nearest"
+    });
+
+    if (footerHeight) {
+      window.scrollBy({
+        top: -(footerHeight / 2 + extraOffset),
+        behavior: "smooth"
+      });
+    }
+  }, 250);
+}
+
+function attachMobileInputScrollHandling() {
+  if (mobileInputScrollAttached) return;
+
+  document.addEventListener("focusin", event => {
+    const target = event.target;
+    if (!isTextInput(target)) return;
+
+    scrollFocusedInputIntoView(target);
+  });
+
+  mobileInputScrollAttached = true;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   loadSiteComponents();
+  attachMobileInputScrollHandling();
   attachGlobalNotificationRouting().catch(err => console.error("Notification routing setup failed:", err));
 });
