@@ -517,7 +517,6 @@ function reconcileTriggeredStateForPark(park) {
 
 async function sendTriggeredNotifications(triggeredAlerts) {
   if (!triggeredAlerts.length) return;
-
   if (!pushState.messaging) {
     console.warn("Triggered alerts found, but Firebase is not configured.");
     return;

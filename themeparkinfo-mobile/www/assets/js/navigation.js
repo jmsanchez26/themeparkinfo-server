@@ -3,8 +3,6 @@
  */
 const GLOBAL_ALERTS_PAGE_PATH = "/pages/alerts.html";
 let notificationRoutingAttached = false;
-let mobileInputScrollAttached = false;
-let activeTextInput = null;
 
 function loadSiteComponents() {
   const headerPlaceholder = document.getElementById('header-placeholder');
@@ -68,80 +66,7 @@ async function attachGlobalNotificationRouting() {
   notificationRoutingAttached = true;
 }
 
-function isTextInput(element) {
-  if (!element || !(element instanceof HTMLElement)) return false;
-
-  if (element.matches("textarea, select")) {
-    return true;
-  }
-
-  if (!element.matches("input")) {
-    return false;
-  }
-
-  const type = String(element.getAttribute("type") || "text").toLowerCase();
-  return !["checkbox", "radio", "range", "button", "submit", "reset", "color", "file", "hidden"].includes(type);
-}
-
-function scrollFocusedInputIntoView(target) {
-  const footer = document.querySelector(".site-footer");
-  const footerHeight = footer?.offsetHeight || 0;
-  const extraOffset = 20;
-  const runScroll = () => {
-    if (!target || document.activeElement !== target) return;
-
-    target.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-      inline: "nearest"
-    });
-
-    if (footerHeight) {
-      window.scrollBy({
-        top: -(footerHeight / 2 + extraOffset),
-        behavior: "smooth"
-      });
-    }
-  };
-
-  [80, 220, 420].forEach(delay => {
-    window.setTimeout(runScroll, delay);
-  });
-}
-
-function attachMobileInputScrollHandling() {
-  if (mobileInputScrollAttached) return;
-
-  document.addEventListener("focusin", event => {
-    const target = event.target;
-    if (!isTextInput(target)) return;
-
-    activeTextInput = target;
-    scrollFocusedInputIntoView(target);
-  });
-
-  document.addEventListener("focusout", event => {
-    if (event.target === activeTextInput) {
-      activeTextInput = null;
-    }
-  });
-
-  const viewport = window.visualViewport;
-  const reflowActiveInput = () => {
-    if (activeTextInput && document.activeElement === activeTextInput) {
-      scrollFocusedInputIntoView(activeTextInput);
-    }
-  };
-
-  window.addEventListener("resize", reflowActiveInput);
-  viewport?.addEventListener("resize", reflowActiveInput);
-  viewport?.addEventListener("scroll", reflowActiveInput);
-
-  mobileInputScrollAttached = true;
-}
-
 document.addEventListener("DOMContentLoaded", () => {
   loadSiteComponents();
-  attachMobileInputScrollHandling();
   attachGlobalNotificationRouting().catch(err => console.error("Notification routing setup failed:", err));
 });
