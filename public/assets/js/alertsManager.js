@@ -1,5 +1,27 @@
 (function () {
   const baseUrl = window.__API_BASE__ || "";
+  const isNative = Boolean(window.Capacitor?.isNativePlatform?.());
+  function readLocalAlerts() {
+    const alerts = JSON.parse(localStorage.getItem("waitTimeAlerts") || "[]");
+    return Array.isArray(alerts) ? alerts : [];
+  }
+  function writeLocalAlerts(alerts) {
+    localStorage.setItem("waitTimeAlerts", JSON.stringify(alerts));
+  }
+  function localAlertId(alert, index) {
+    return alert.id || "local-" + index;
+  }
+  function changeLocalAlert(alertId, waitTime) {
+    const alerts = readLocalAlerts();
+    const index = alerts.findIndex((alert, index) => localAlertId(alert, index) === alertId);
+    if (index < 0) throw new Error("Alert no longer exists. Refresh and try again.");
+    if (waitTime === undefined) alerts.splice(index, 1);
+    else {
+      alerts[index].waitTime = waitTime;
+      delete alerts[index].triggeredAt;
+    }
+    writeLocalAlerts(alerts);
+  }
   let alertsRefreshTimerId = null;
   let pendingDeleteAlert = null;
 
@@ -53,6 +75,17 @@
     }
 
     try {
+      if (!isNative) {
+        const alerts = readLocalAlerts().map((alert, index) => ({
+          ...alert, id: localAlertId(alert, index), isTriggered: Boolean(alert.triggeredAt)
+        }));
+        renderAlerts(alerts);
+        status.textContent = alerts.length
+          ? alerts.length + " saved alert" + (alerts.length === 1 ? "" : "s")
+          : "No wait time alerts saved yet.";
+        scheduleRefresh();
+        return;
+      }
       let response = null;
       let lastError = null;
 
@@ -164,6 +197,7 @@
   }
 
   async function updateAlert(alertId, waitTime) {
+    if (!isNative) return changeLocalAlert(alertId, waitTime);
     const response = await fetch(`${baseUrl}/api/alerts/${alertId}`, {
       method: "PATCH",
       headers: {
@@ -178,6 +212,7 @@
   }
 
   async function deleteAlert(alertId) {
+    if (!isNative) return changeLocalAlert(alertId);
     const response = await fetch(`${baseUrl}/api/alerts/${alertId}`, {
       method: "DELETE"
     });
@@ -273,6 +308,7 @@
       }
     });
 
+    if (!isNative) window.addEventListener("storage", () => loadAlerts());
     loadAlerts();
   });
 })();

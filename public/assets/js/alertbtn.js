@@ -302,10 +302,17 @@ function openSetAlertModal(item) {
       if (canUseServerSidePush()) {
         await saveServerSideAlert(item, value);
       } else {
-        waitTimeAlerts.push({
-          name: item.name,
-          waitTime: value
-        });
+        const park = alertVar.toLowerCase() === "ushollywood" ? "hollywood" : alertVar.toLowerCase();
+        const existing = waitTimeAlerts.find(alert => alert.name === item.name && (!alert.park || alert.park === park));
+        if (existing) {
+          existing.waitTime = value;
+          existing.park = park;
+          delete existing.triggeredAt;
+        } else {
+          waitTimeAlerts.push({
+            id: crypto.randomUUID(), name: item.name, park, waitTime: value
+          });
+        }
 
         localStorage.setItem("waitTimeAlerts", JSON.stringify(waitTimeAlerts));
       }
@@ -361,6 +368,8 @@ function checkAlerts(park) {
   const triggered = [];
 
   waitTimeAlerts.forEach(alert => {
+    const parkKey = park.toLowerCase() === "ushollywood" ? "hollywood" : park.toLowerCase();
+    if (alert.triggeredAt || (alert.park && alert.park !== parkKey)) return;
     const match = allItems.find(i => i.name === alert.name);
     if (!match) return;
 
@@ -369,7 +378,7 @@ function checkAlerts(park) {
 
     if (
       (statusLower === "operating" && hasWait && match.waitTime <= alert.waitTime) ||
-      statusLower !== "operating"
+      (statusLower && statusLower !== "operating")
     ) {
       triggered.push({
         ...match,
@@ -380,9 +389,11 @@ function checkAlerts(park) {
   });
 
   if (triggered.length) {
-    waitTimeAlerts = waitTimeAlerts.filter(
-      alert => !triggered.some(trigger => trigger.name === alert.name)
-    );
+    waitTimeAlerts.forEach(alert => {
+      if (triggered.some(trigger => trigger.name === alert.name)) {
+        alert.triggeredAt = new Date().toISOString();
+      }
+    });
     localStorage.setItem("waitTimeAlerts", JSON.stringify(waitTimeAlerts));
     openTriggeredModal(triggered);
   }
