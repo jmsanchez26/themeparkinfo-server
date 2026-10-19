@@ -6,6 +6,7 @@ if (!Array.isArray(favoriteRideKeys)) favoriteRideKeys = [];
 let parkDataRequestInFlight = false;
 let parkDataRetryTimeoutId = null;
 let lastResumeRefreshAt = 0;
+let rideAlertSubscriptions = [];
 const appLifecyclePlugin = window.Capacitor?.Plugins?.App;
 const RIDE_PARK_LABELS = {
   mg: "Magic Kingdom",
@@ -45,6 +46,48 @@ function isFavoriteRide(park, item) {
 
 function persistFavoriteRides() {
   localStorage.setItem("favoriteRideKeys", JSON.stringify(favoriteRideKeys));
+}
+
+const RIDE_RESORT_KEYS = {
+  mg: 'wdw', epcot: 'wdw', ak: 'wdw', hollywood: 'wdw',
+  disneyland: 'disneyland', caliadv: 'disneyland',
+  usfl: 'usorlando', islandofAdventure: 'usorlando', epic: 'usorlando', volcanoBay: 'usorlando',
+  usHollywood: 'hollywood'
+};
+
+function hasRideAlert(park, item) {
+  const resort = RIDE_RESORT_KEYS[park];
+  return rideAlertSubscriptions.some(alert => {
+    const savedPark = String(alert.park || '').toLowerCase();
+    if (savedPark && (savedPark === 'ushollywood' ? 'hollywood' : savedPark) !== resort) return false;
+    return alert.rideId ? alert.rideId === item.id : alert.name === item.name;
+  });
+}
+
+async function refreshRideAlertState() {
+  if (window.Capacitor?.getPlatform?.() === 'android') {
+    try {
+      const response = await window.AlertSecurity.request('/api/alerts');
+      const payload = await response.json();
+      rideAlertSubscriptions = Array.isArray(payload.data) ? payload.data : [];
+    } catch {
+      // Keep the last known saved state if the private API is temporarily unavailable.
+    }
+  } else {
+    try {
+      const alerts = JSON.parse(localStorage.getItem('waitTimeAlerts') || '[]');
+      waitTimeAlerts = Array.isArray(alerts) ? alerts : [];
+    } catch { waitTimeAlerts = []; }
+    rideAlertSubscriptions = waitTimeAlerts;
+  }
+}
+
+function markRideAlertSet(item) {
+  const park = alertVar.toLowerCase() === 'ushollywood' ? 'hollywood' : alertVar.toLowerCase();
+  if (!rideAlertSubscriptions.some(alert => alert.park === park && alert.rideId === item.id)) {
+    rideAlertSubscriptions.push({ park, rideId: item.id, name: item.name });
+  }
+  renderAll();
 }
 
 function normalizeRideMetaKey(value) {
@@ -368,6 +411,7 @@ async function getParkData() {
           status,
           id: rideID,
           rideNow: goodTimeToRide,
+          forecast: item.forecast,
           NextLL: NextLLregularTime,
           avgWaitTime: attrAvgWaitTime,
           waitDopBool: waitTimeWillDrop,
@@ -381,6 +425,7 @@ async function getParkData() {
 
       });
 
+      await refreshRideAlertState();
       renderAll();
       checkAlerts(alertVar);
   } catch (err) {
@@ -410,66 +455,7 @@ function getParkKey(parkId) {
 }
 
 function fetchWaitTimeForecast(name, currentWaitTime, forecastArr = []) {
-  let runningWaitTimeCounter = 0;
-  let arrCount = 0; 
-  let waitWillDrop = false; 
-  let lowestWait = currentWaitTime;
-  let lowestWaitTimeStamp = '';
-  let goodToRide;
-
-  const now = new Date();
-
-  // Remove forecast entries that already happened
-  const futureForecast = forecastArr.filter(item => {
-    return new Date(item.time) >= now;
-  });
-
-  // Safety check
-if (!futureForecast.length) {
-  return [null, false, currentWaitTime];
-}
-  //console.log('----------------------');
-//   console.log(name)
-// console.log(futureForecast);
-
-  futureForecast.forEach(item => {
-    arrCount++;
-    runningWaitTimeCounter += item.waitTime;
-
-    if (item.waitTime < lowestWait && arrCount <= 2) {
-      waitWillDrop = true;
-      lowestWait = item.waitTime;
-      lowestWaitTimeStamp = item.time;
-    }
-
-  });
-
-  const avgWaitTime = Math.round(runningWaitTimeCounter / arrCount);
-  const isClose = Math.abs(currentWaitTime - avgWaitTime) <= 4;
-
-  if(isClose){
-    goodToRide = true;
-  }else if (currentWaitTime < avgWaitTime) {
-    goodToRide = true;
-  }else if(!waitWillDrop){
-    goodToRide = true;
-  }else if(currentWaitTime < 20){
-    goodToRide = true;
-  }else {
-    goodToRide = false;
-  }
-
-  // console.log({
-  //   attraction: name,
-  //   currentWaitTime,
-  //   isClose,
-  //   avgWaitTime,
-  //   lowestUpcomingWait: lowestWait,
-  //   waitWillDrop,
-  //   goodToRide,
-  //   lowestWaitTimeStamp
-  // });
-  return [goodToRide, waitWillDrop, lowestWait, avgWaitTime];
+  return window.AlertRules.forecastInsight(currentWaitTime, forecastArr);
 }
 
 function renderCards(park, type, selector) {
@@ -499,6 +485,8 @@ function renderCards(park, type, selector) {
     const isFavorite = type === "rides" && isFavoriteRide(park, item);
     const llDetails = getRideLLDetails(item);
     const showDisneyLL = DISNEY_RIDE_PARKS.has(park) && nextLLTime;
+    const alertBadge = hasRideAlert(park, item)
+      ? '<span class="ride-alert-badge"><i class="fa fa-bell" aria-hidden="true"></i> Alert set</span>' : '';
     let waitForecastIcon = '';
     card.className = type === "rides" ? "wait-card wait-card-modern" : "wait-card";
     if (statusLower === "operating" && hasWait && rideNow !== null) {
@@ -516,9 +504,12 @@ function renderCards(park, type, selector) {
               <i class="fa fa-star"></i>
             </button>
           </div>
+          <div class="ride-status-badges">
           <span class="saved-alert-chip ${statusLower === "operating" ? "watching" : "hit"}">
             ${item.status || "Unknown"}
           </span>
+          ${alertBadge}
+          </div>
         </div>
 
         <div class="saved-alert-stats wait-card-stats">
@@ -585,9 +576,12 @@ function renderCards(park, type, selector) {
         </div>
         <div class="wait-card-inner">
           <div class="card-left">
+            <div class="ride-status-badges">
             <span class="status ${statusLower === "operating" ? "active" : "inactive"}">
               ${item.status}
             </span>
+            ${alertBadge}
+            </div>
           </div>
           <div class="card-middle">
               <div class="wait-time">
@@ -663,6 +657,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   getParkData();
   setInterval(getParkData, 30000);
+  window.addEventListener('storage', event => {
+    if (event.key === 'waitTimeAlerts' || event.key === null) {
+      refreshRideAlertState().then(() => renderAll());
+    }
+  });
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {

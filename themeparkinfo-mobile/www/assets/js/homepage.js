@@ -407,7 +407,7 @@
           </div>
           <div class="saved-alert-stat">
             <span class="saved-alert-stat-label">Your alert</span>
-            <span class="saved-alert-stat-value">${formatWait(alert.waitTime)}</span>
+            <span class="saved-alert-stat-value">${alert.mode === "good_time" ? "Wait drops + good time" : formatWait(alert.waitTime)}</span>
           </div>
         </div>
 
@@ -431,7 +431,7 @@
         ` : ""}
 
         <div class="saved-alert-footer">
-          ${alert.isTriggered ? "This alert already hit. Open Alerts for details." : "Open Alerts to update or delete this alert."}
+          ${alert.mode === "good_time" ? "Watching for wait drops with a good-time recommendation." : alert.isTriggered ? "This alert already hit. Open Alerts for details." : "Open Alerts to update or delete this alert."}
         </div>
       </a>
     `).join(""));
@@ -495,6 +495,7 @@
               .filter(item => item.entityType === "ATTRACTION")
               .map(item => ({
                 name: item.name,
+                ride: item,
                 currentWait: item.queue?.STANDBY?.waitTime,
                 status: item.status || "Unknown",
                 parkLabel: formatParkLabel(item.parkId, endpoint.label),
@@ -507,10 +508,7 @@
 
         if (!match) return null;
 
-        const statusLower = String(match.status || "").toLowerCase();
-        const isTriggered =
-          (statusLower === "operating" && typeof match.currentWait === "number" && match.currentWait <= alert.waitTime) ||
-          (statusLower && statusLower !== "operating");
+        const { isTriggered } = window.AlertRules.evaluate(alert, match.ride);
 
         return {
           id: `local-${window.SafeHTML.text(alert.name)}`,
@@ -518,9 +516,10 @@
           parkLabel: match.parkLabel,
           currentWait: match.currentWait,
           waitTime: alert.waitTime,
+          mode: alert.mode || "threshold",
           status: match.status,
           isTriggered,
-          triggeredAt: null,
+          triggeredAt: alert.triggeredAt || null,
           llLabel: match.llLabel,
           nextLL: match.nextLL,
           paidLL: match.paidLL

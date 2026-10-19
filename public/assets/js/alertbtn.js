@@ -173,7 +173,7 @@ async function ensurePushToken() {
   return pushRegistrationState.pending;
 }
 
-async function saveServerSideAlert(item, waitTime) {
+async function saveServerSideAlert(item, waitTime, mode) {
   const deviceToken = await initializePushNotifications();
 
   if (!deviceToken) {
@@ -192,7 +192,8 @@ async function saveServerSideAlert(item, waitTime) {
         body: JSON.stringify({
           park: alertVar.toLowerCase() === "ushollywood" ? "hollywood" : alertVar.toLowerCase(),
           rideId: item.id,
-          waitTime
+          waitTime,
+          mode
         })
       });
 
@@ -230,8 +231,16 @@ function openSetAlertModal(item) {
       <h3>${window.SafeHTML.text(item.name)}</h3>
       <p>Current wait: ${item.waitTime} min</p>
 
-      <label>Alert me when wait time is</label>
-      <input type="number" id="alertValue" placeholder="Minutes" />
+      <label for="alertMode">Notify me when</label>
+      <select id="alertMode">
+        <option value="threshold">Set a wait time</option>
+        <option value="good_time">Tell me when is the best time</option>
+      </select>
+      <div id="alertThresholdFields">
+        <small class="alert-threshold-help">Alerts you when the wait reaches your chosen time or drops below it.</small>
+        <label for="alertValue">Wait time (minutes)</label>
+        <input type="number" id="alertValue" min="0" max="300" step="1" placeholder="Minutes" />
+      </div>
       <p id="alertErrorMsg" class="alert-error" style="display:none;"></p>
 
       <div class="modalActions">
@@ -247,11 +256,18 @@ function openSetAlertModal(item) {
     modal.style.display = "none";
   };
 
+  document.getElementById("alertMode").onchange = event => {
+    const smart = event.target.value === "good_time";
+    document.getElementById("alertThresholdFields").hidden = smart;
+  };
+
   document.getElementById("saveAlertBtn").onclick = async () => {
     const saveButton = document.getElementById("saveAlertBtn");
     const errorMessage = document.getElementById("alertErrorMsg");
-    const value = parseInt(document.getElementById("alertValue").value, 10);
-    if (!Number.isInteger(value) || value < 0 || value > 300) {
+    const mode = document.getElementById("alertMode").value;
+    const rawValue = document.getElementById("alertValue").value;
+    const value = mode === "good_time" ? null : Number(rawValue);
+    if (mode === "threshold" && (!rawValue.trim() || !Number.isInteger(value) || value < 0 || value > 300)) {
       errorMessage.textContent = "Enter a whole number from 0 to 300 minutes.";
       errorMessage.style.display = "block";
       return;
@@ -263,24 +279,27 @@ function openSetAlertModal(item) {
       saveButton.textContent = "Saving...";
 
       if (canUseServerSidePush()) {
-        await saveServerSideAlert(item, value);
+        await saveServerSideAlert(item, value, mode);
       } else {
         const park = alertVar.toLowerCase() === "ushollywood" ? "hollywood" : alertVar.toLowerCase();
         const existing = waitTimeAlerts.find(alert => alert.name === item.name && (!alert.park || alert.park === park));
         if (existing) {
           existing.waitTime = value;
+          existing.mode = mode;
+          existing.lastObservedWait = window.AlertRules.observation(item);
           existing.park = park;
           existing.rideId = item.id;
           delete existing.triggeredAt;
         } else {
           waitTimeAlerts.push({
-            id: crypto.randomUUID(), rideId: item.id, name: item.name, park, waitTime: value
+            id: crypto.randomUUID(), rideId: item.id, name: item.name, park, waitTime: value, mode, lastObservedWait: window.AlertRules.observation(item)
           });
         }
 
         localStorage.setItem("waitTimeAlerts", JSON.stringify(waitTimeAlerts));
       }
 
+      if (typeof markRideAlertSet === "function") markRideAlertSet(item);
       modal.style.display = "none";
     } catch (error) {
       console.error("Failed to save alert:", error);
@@ -333,34 +352,18 @@ function checkAlerts(park) {
 
   waitTimeAlerts.forEach(alert => {
     const parkKey = park.toLowerCase() === "ushollywood" ? "hollywood" : park.toLowerCase();
-    if (alert.triggeredAt || (alert.park && alert.park !== parkKey)) return;
-    const match = allItems.find(i => i.name === alert.name);
+    if (alert.park && alert.park !== parkKey) return;
+    const match = allItems.find(item => alert.rideId ? item.id === alert.rideId : item.name === alert.name);
     if (!match) return;
-
-    const statusLower = match.status?.toLowerCase();
-    const hasWait = typeof match.waitTime === "number";
-
-    if (
-      (statusLower === "operating" && hasWait && match.waitTime <= alert.waitTime) ||
-      (statusLower && statusLower !== "operating")
-    ) {
-      triggered.push({
-        ...match,
-        alertWait: alert.waitTime,
-        isDown: statusLower !== "operating"
-      });
+    const evaluated = window.AlertRules.evaluate(alert, match);
+    if (evaluated.isTriggered && (alert.mode === "good_time" || !alert.triggeredAt)) {
+      triggered.push({ ...match, alertWait: alert.waitTime, mode: alert.mode, isDown: evaluated.isDown });
+      alert.triggeredAt = new Date().toISOString();
     }
+    if (alert.mode === "good_time") alert.lastObservedWait = window.AlertRules.observation(match);
   });
-
-  if (triggered.length) {
-    waitTimeAlerts.forEach(alert => {
-      if (triggered.some(trigger => trigger.name === alert.name)) {
-        alert.triggeredAt = new Date().toISOString();
-      }
-    });
-    localStorage.setItem("waitTimeAlerts", JSON.stringify(waitTimeAlerts));
-    openTriggeredModal(triggered);
-  }
+  localStorage.setItem("waitTimeAlerts", JSON.stringify(waitTimeAlerts));
+  if (triggered.length) openTriggeredModal(triggered);
 }
 
 
@@ -381,7 +384,9 @@ function openTriggeredModal(alerts) {
           ${
             a.isDown
               ? `<p class="alert-down">Status: Currently Down</p>`
-              : `<p>Now: ${a.waitTime} min (alert: ${a.alertWait} min)</p>`
+              : a.mode === "good_time"
+                ? `<p>Wait dropped to ${a.waitTime} min. It is a good time to ride!</p>`
+                : `<p>Now: ${a.waitTime} min (alert: ${a.alertWait} min)</p>`
           }
         </div>
       `).join("")}

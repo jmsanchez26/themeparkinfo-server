@@ -98,6 +98,25 @@ test('requests are rate limited', async t => {
   await send('get', '/api/alerts').expect(429);
 });
 
+test('verified owners can create and edit good-time alerts without minutes while invalid modes remain rejected', async t => {
+  const { send, register, store } = await setup(t);
+  await register(A, tokenA);
+  await send('post', '/api/alerts').send({ park: 'wdw', rideId: 'ride-1', mode: 'good_time' }).expect(201);
+  const alert = store.state.alerts[0];
+  assert.equal(alert.mode, 'good_time');
+  assert.equal(alert.waitTime, null);
+  const response = await send('get', '/api/alerts').expect(200);
+  assert.equal(response.body.data[0].mode, 'good_time');
+  assert.equal(response.body.data[0].deviceToken, undefined);
+  await send('patch', '/api/alerts/' + alert.id).send({ mode: 'threshold' }).expect(400);
+  await send('patch', '/api/alerts/' + alert.id).send({ mode: 'threshold', waitTime: 25 }).expect(200);
+  assert.equal(store.state.alerts[0].mode, 'threshold');
+  assert.equal(store.state.alerts[0].waitTime, 25);
+  await send('patch', '/api/alerts/' + alert.id).send({ mode: 'good_time' }).expect(200);
+  await send('patch', '/api/alerts/' + alert.id).send({ mode: 'anything' }).expect(400);
+  await send('post', '/api/alerts').send({ park: 'wdw', rideId: 'ride-1', mode: 'anything', waitTime: 20 }).expect(400);
+});
+
 test('atomic persistence serializes concurrent updates, expires private data and rolls back write errors', async t => {
   const { store } = await setup(t);
   await Promise.all(Array.from({ length: 20 }, (_, i) => store.transaction(state => {

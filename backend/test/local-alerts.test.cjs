@@ -12,7 +12,7 @@ for (const base of ['public', 'themeparkinfo-mobile/www']) {
     const w = dom.window;
     try {
       w.document.addEventListener = () => {};
-      for (const name of ['purify.min.js', 'safeHtml.js']) w.eval(fs.readFileSync(path.resolve(__dirname, '../../', base, 'assets/js', name), 'utf8'));
+      for (const name of ['purify.min.js', 'safeHtml.js', 'alertRules.js']) w.eval(fs.readFileSync(path.resolve(__dirname, '../../', base, 'assets/js', name), 'utf8'));
       w.localStorage.setItem('waitTimeAlerts', JSON.stringify([{ id: 'local-1', name: 'Test Ride', park: 'disneyland', waitTime: 10 }]));
       let offline = false, wait = 25;
       w.fetch = async url => {

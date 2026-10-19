@@ -9,7 +9,7 @@ for (const base of ['public', 'themeparkinfo-mobile/www']) {
   test(`${base}: malicious stored alert HTML cannot retain executable content`, () => {
     const dom = new JSDOM('<div id="alertsList"></div>', { url: 'https://localhost/pages/alerts.html', runScripts: 'outside-only' });
     try {
-      for (const name of ['purify.min.js', 'safeHtml.js']) dom.window.eval(fs.readFileSync(path.join(root, base, 'assets/js', name), 'utf8'));
+      for (const name of ['purify.min.js', 'safeHtml.js', 'alertRules.js']) dom.window.eval(fs.readFileSync(path.join(root, base, 'assets/js', name), 'utf8'));
       dom.window.AlertSecurity = { request: async () => ({ json: async () => ({ data: [] }) }) };
       dom.window.Capacitor = { getPlatform: () => 'android' };
       let source = fs.readFileSync(path.join(root, base, 'assets/js/alertsManager.js'), 'utf8');
@@ -38,7 +38,7 @@ test('all dynamic HTML assignments use the sanitizer; each page loads it before 
   const acorn = require('acorn'), walk = require('acorn-walk');
   for (const base of ['public', 'themeparkinfo-mobile/www']) {
     const dir = path.join(root, base, 'assets/js');
-    for (const file of fs.readdirSync(dir).filter(f => f.endsWith('.js') && !['purify.min.js', 'safeHtml.js'].includes(f))) {
+    for (const file of fs.readdirSync(dir).filter(f => f.endsWith('.js') && !['purify.min.js', 'safeHtml.js', 'alertRules.js'].includes(f))) {
       const source = fs.readFileSync(path.join(dir, file), 'utf8');
       walk.simple(acorn.parse(source, { ecmaVersion: 'latest' }), { AssignmentExpression(node) {
         if (node.left.type === 'MemberExpression' && node.left.property.name === 'innerHTML') {

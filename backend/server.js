@@ -6,6 +6,7 @@ const helmet = require("helmet");
 const { AlertStore } = require("./alert-store");
 const { registerAlertApi } = require("./alert-api");
 const { fetchParkData, useHostedParkData } = require("./park-data");
+const alertRules = require("../public/assets/js/alertRules");
 require("dotenv").config();
 
 let firebaseAdmin = null;
@@ -294,6 +295,9 @@ function initializeFirebaseMessaging() {
 }
 
 function buildAlertBody(alert) {
+  if (alert.mode === 'good_time') {
+    return `${alert.name} dropped to ${alert.currentWait} min. It's a good time to ride!`;
+  }
   if (alert.isDown) {
     return `${alert.name} is currently ${alert.status || "down"}.`;
   }
@@ -319,27 +323,7 @@ function evaluateAlert(alert) {
   const cachedData = cache[alert.park]?.data;
   const match = cachedData?.liveData?.find(item => item.id === alert.rideId);
 
-  if (!match) {
-    return {
-      status: "Unknown",
-      currentWait: null,
-      isTriggered: false
-    };
-  }
-
-  const status = match.status || "Unknown";
-  const currentWait = match.queue?.STANDBY?.waitTime ?? null;
-  const statusLower = String(status).toLowerCase();
-  const isTriggered =
-    (statusLower === "operating" && typeof currentWait === "number" && currentWait <= alert.waitTime) ||
-    (statusLower && statusLower !== "operating");
-
-  return {
-    status,
-    currentWait,
-    isTriggered,
-    isDown: Boolean(statusLower) && statusLower !== "operating"
-  };
+  return alertRules.evaluate(alert, match);
 }
 
 function findTriggeredAlertsForPark(park) {
@@ -355,7 +339,7 @@ function findTriggeredAlertsForPark(park) {
   parkAlerts.forEach(alert => {
     const evaluatedAlert = evaluateAlert(alert);
 
-    if (evaluatedAlert.isTriggered && !alert.triggeredAt) {
+    if (evaluatedAlert.isTriggered && (alert.mode === 'good_time' || !alert.triggeredAt)) {
       triggered.push({
         ...alert,
         ...evaluatedAlert
@@ -372,28 +356,30 @@ function buildAlertSnapshot(alert) {
   return {
     id: alert.id, park: alert.park, rideId: alert.rideId, name: alert.name,
     waitTime: alert.waitTime, createdAt: alert.createdAt, updatedAt: alert.updatedAt,
+    mode: alert.mode || 'threshold',
     triggeredAt: alert.triggeredAt,
     status: evaluatedAlert.status,
     currentWait: evaluatedAlert.currentWait,
+    goodTimeToRide: evaluatedAlert.goodTimeToRide,
     isTriggered: evaluatedAlert.isTriggered,
     lastUpdated: cache[alert.park]?.lastUpdated || null
   };
 }
 
 async function reconcileTriggeredStateForPark(park) {
-  if (!pushState.alerts.some(a => a.park === park && a.triggeredAt && !evaluateAlert(a).isTriggered)) return;
+  if (!pushState.alerts.some(a => a.park === park && a.mode !== 'good_time' && a.triggeredAt && !evaluateAlert(a).isTriggered)) return;
   await alertStore.transaction(state => {
     state.alerts.forEach(alert => {
-      if (alert.park === park && !evaluateAlert(alert).isTriggered) delete alert.triggeredAt;
+      if (alert.park === park && alert.mode !== 'good_time' && !evaluateAlert(alert).isTriggered) delete alert.triggeredAt;
     });
   });
 }
 
 async function sendTriggeredNotifications(triggeredAlerts) {
-  if (!triggeredAlerts.length) return;
+  if (!triggeredAlerts.length) return new Set();
   if (!pushState.messaging) {
     console.warn("Triggered alerts found, but Firebase is not configured.");
-    return;
+    return new Set();
   }
 
   const alertsByToken = new Map();
@@ -443,7 +429,7 @@ async function sendTriggeredNotifications(triggeredAlerts) {
     })
   );
 
-  if (!deliveredAlertIds.size && !invalidTokens.size) return;
+  if (!deliveredAlertIds.size && !invalidTokens.size) return deliveredAlertIds;
 
   await alertStore.transaction(state => {
     state.devices = state.devices.filter(d => !invalidTokens.has(d.token));
@@ -453,10 +439,21 @@ async function sendTriggeredNotifications(triggeredAlerts) {
       return true;
     });
   });
+  return deliveredAlertIds;
 }
 
 async function processTriggeredAlertsForPark(park) {
-  await sendTriggeredNotifications(findTriggeredAlertsForPark(park));
+  const triggered = findTriggeredAlertsForPark(park);
+  const delivered = await sendTriggeredNotifications(triggered);
+  const retryIds = new Set(triggered.filter(alert => alert.mode === 'good_time' && !delivered.has(alert.id)).map(alert => alert.id));
+  const smart = pushState.alerts.filter(alert => alert.park === park && alert.mode === 'good_time' && !retryIds.has(alert.id));
+  if (smart.some(alert => alert.lastObservedWait !== alertRules.observation(cache[park]?.data?.liveData?.find(ride => ride.id === alert.rideId)))) {
+    await alertStore.transaction(state => {
+      state.alerts.filter(alert => alert.park === park && alert.mode === 'good_time' && !retryIds.has(alert.id)).forEach(alert => {
+        alert.lastObservedWait = alertRules.observation(cache[park]?.data?.liveData?.find(ride => ride.id === alert.rideId));
+      });
+    });
+  }
 }
 
 async function updateCache() {
@@ -584,7 +581,7 @@ app.use((error, req, res, next) => {
   console.error("Request failed:", status);
   res.status(status).json({ error: true, message: error.publicMessage || (status === 400 ? "Invalid request" : status === 413 ? "Request too large" : "Request could not be completed") });
 });
-module.exports = { app, alertStore, cache, buildAlertSnapshot, initializeFirebaseMessaging };
+module.exports = { app, alertStore, cache, buildAlertSnapshot, initializeFirebaseMessaging, processTriggeredAlertsForPark, pushState };
 if (require.main === module) startServer().catch(error => {
   console.error("Server failed to start:", error);
   process.exit(1);

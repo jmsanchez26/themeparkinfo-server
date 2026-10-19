@@ -11,13 +11,14 @@
   function localAlertId(alert, index) {
     return alert.id || "local-" + index;
   }
-  function changeLocalAlert(alertId, waitTime) {
+  function changeLocalAlert(alertId, waitTime, mode) {
     const alerts = readLocalAlerts();
     const index = alerts.findIndex((alert, index) => localAlertId(alert, index) === alertId);
     if (index < 0) throw new Error("Alert no longer exists. Refresh and try again.");
     if (waitTime === undefined) alerts.splice(index, 1);
     else {
       alerts[index].waitTime = waitTime;
+      alerts[index].mode = mode;
       delete alerts[index].triggeredAt;
     }
     writeLocalAlerts(alerts);
@@ -98,14 +99,14 @@
       if (alert.park !== match.park || alert.rideId !== match.ride.id) {
         alert.park = match.park; alert.rideId = match.ride.id; changed = true;
       }
-      const status = match.ride.status || "Status unavailable";
-      const statusLower = status.toLowerCase();
-      const currentWait = match.ride.queue?.STANDBY?.waitTime ?? null;
-      const hit = (statusLower === "operating" && typeof currentWait === "number" && currentWait <= alert.waitTime) ||
-        ["down", "closed", "refurbishment"].includes(statusLower);
-      if (hit && !alert.triggeredAt) { alert.triggeredAt = new Date().toISOString(); changed = true; }
-      return { ...alert, id: localAlertId(alert, index), status, currentWait,
-        lastUpdated: match.lastUpdated, isTriggered: Boolean(alert.triggeredAt) };
+      const evaluated = window.AlertRules.evaluate(alert, match.ride);
+      if (evaluated.isTriggered && (alert.mode === "good_time" || !alert.triggeredAt)) {
+        alert.triggeredAt = new Date().toISOString(); changed = true;
+      }
+      const observed = window.AlertRules.observation(match.ride);
+      if (alert.lastObservedWait !== observed) { alert.lastObservedWait = observed; changed = true; }
+      return { ...alert, ...evaluated, id: localAlertId(alert, index), lastUpdated: match.lastUpdated,
+        isTriggered: alert.mode === "good_time" ? evaluated.isTriggered : Boolean(alert.triggeredAt) };
     });
     if (changed) writeLocalAlerts(current);
     return snapshots;
@@ -202,7 +203,7 @@
             <div class="alert-title-row">
               <h3>${window.SafeHTML.text(alert.name)}</h3>
               <span class="alert-chip ${alert.isTriggered ? "live" : "pending"}">
-                ${alert.isTriggered ? "Alert hit" : "Watching"}
+                ${alert.mode === "good_time" ? "Watching drops" : alert.isTriggered ? "Alert hit" : "Watching"}
               </span>
             </div>
             <div class="alert-manager-meta">
@@ -215,20 +216,22 @@
         <div class="alert-manager-body">
           <div class="alert-stat-grid">
             <div class="alert-stat">
-              <span class="alert-stat-label">Alert threshold</span>
-              <span class="alert-stat-value">${formatWait(alert.waitTime)}</span>
+              <span class="alert-stat-label">Alert type</span>
+              <span class="alert-stat-value">${alert.mode === "good_time" ? "Wait drops + good time to ride" : formatWait(alert.waitTime)}</span>
             </div>
             <div class="alert-stat">
               <span class="alert-stat-label">Current wait</span>
               <span class="alert-stat-value">${formatWait(alert.currentWait)}</span>
             </div>
             <div class="alert-stat">
-              <span class="alert-stat-label">${alert.isTriggered ? "Alert hit" : "Last refresh"}</span>
-              <span class="alert-stat-value">${alert.isTriggered ? formatTriggered(alert.triggeredAt, alert.park) : formatUpdated(alert.lastUpdated, alert.park)}</span>
+              <span class="alert-stat-label">${alert.mode === "good_time" && alert.triggeredAt ? "Last good-time alert" : alert.isTriggered ? "Alert hit" : "Last refresh"}</span>
+              <span class="alert-stat-value">${(alert.mode === "good_time" && alert.triggeredAt) || alert.isTriggered ? formatTriggered(alert.triggeredAt, alert.park) : formatUpdated(alert.lastUpdated, alert.park)}</span>
             </div>
           </div>
 
-          ${alert.isTriggered ? `
+          ${alert.mode === "good_time" && alert.isTriggered ? `
+            <div class="alert-hit-banner">The wait dropped and it is a good time to ride! This alert will keep watching for new drops.</div>
+          ` : alert.isTriggered ? `
             <div class="alert-hit-banner">
               This alert was already hit. It stays here until you update it or delete it.
             </div>
@@ -236,8 +239,14 @@
 
           <div class="alert-manager-actions">
             <div class="alert-input-group">
-              <label for="wait-${alert.id}">${alert.isTriggered ? "Set a new threshold" : "Update threshold"}</label>
-              <input id="wait-${alert.id}" type="number" min="0" value="${alert.waitTime}" />
+              <label for="mode-${alert.id}">Alert type</label>
+              <select id="mode-${alert.id}" class="alert-mode-select">
+                <option value="threshold" ${alert.mode !== "good_time" ? "selected" : ""}>Set a wait time</option>
+                <option value="good_time" ${alert.mode === "good_time" ? "selected" : ""}>Tell me when is the best time</option>
+              </select>
+              <small class="alert-threshold-help" ${alert.mode === "good_time" ? "hidden" : ""}>Alerts you when the wait reaches your chosen time or drops below it.</small>
+              <label for="wait-${alert.id}" class="threshold-label" ${alert.mode === "good_time" ? "hidden" : ""}>Wait time (minutes)</label>
+              <input id="wait-${alert.id}" type="number" min="0" max="300" value="${alert.waitTime ?? ""}" ${alert.mode === "good_time" ? "hidden" : ""} />
             </div>
             <button class="alert-action-btn update" data-action="update">Update</button>
             <button class="alert-action-btn delete" data-action="delete">Delete</button>
@@ -247,14 +256,14 @@
     `).join(""));
   }
 
-  async function updateAlert(alertId, waitTime) {
-    if (!isNative) return changeLocalAlert(alertId, waitTime);
+  async function updateAlert(alertId, waitTime, mode) {
+    if (!isNative) return changeLocalAlert(alertId, waitTime, mode);
     const response = await window.AlertSecurity.request(`/api/alerts/${encodeURIComponent(alertId)}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ waitTime })
+      body: JSON.stringify({ waitTime, mode })
     });
 
     if (!response.ok) {
@@ -292,6 +301,15 @@
     modal?.setAttribute("aria-hidden", "true");
   }
 
+  document.addEventListener("change", event => {
+    if (!event.target.matches(".alert-mode-select")) return;
+    const card = event.target.closest("[data-alert-id]");
+    const smart = event.target.value === "good_time";
+    card.querySelector("input[type='number']").hidden = smart;
+    card.querySelector(".threshold-label").hidden = smart;
+    card.querySelector(".alert-threshold-help").hidden = smart;
+  });
+
   document.addEventListener("click", async event => {
     const button = event.target.closest("[data-action]");
     if (!button) return;
@@ -308,13 +326,14 @@
       button.disabled = true;
 
       if (action === "update") {
-        const waitTime = Number(input.value);
-        if (!Number.isInteger(waitTime) || waitTime < 0 || waitTime > 300) {
+        const mode = card.querySelector(".alert-mode-select").value;
+        const waitTime = mode === "good_time" ? null : Number(input.value);
+        if (mode === "threshold" && (!input.value.trim() || !Number.isInteger(waitTime) || waitTime < 0 || waitTime > 300)) {
           throw new Error("Enter a valid wait time.");
         }
 
         status.textContent = "Updating alert...";
-        await updateAlert(alertId, waitTime);
+        await updateAlert(alertId, waitTime, mode);
       }
 
       if (action === "delete") {

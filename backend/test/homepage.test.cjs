@@ -25,7 +25,7 @@ for (const base of ['public', 'themeparkinfo-mobile/www']) {
           return { ok: true, json: async () => ({ data: [{ id: 'alert-1', name: ride.name, park: 'wdw', waitTime: 25, currentWait: 15, status: 'OPERATING' }] }) };
         } };
         w.fetch = async url => ({ ok: true, json: async () => ({ data: { liveData: String(url).endsWith('/api/wdw') ? [ride] : [] } }) });
-        for (const name of ['purify.min.js', 'safeHtml.js']) w.eval(fs.readFileSync(path.join(root, base, 'assets/js', name), 'utf8'));
+        for (const name of ['purify.min.js', 'safeHtml.js', 'alertRules.js']) w.eval(fs.readFileSync(path.join(root, base, 'assets/js', name), 'utf8'));
         let load;
         w.document.addEventListener = (event, callback) => { if (event === 'DOMContentLoaded') load = callback; };
         const errors = [];

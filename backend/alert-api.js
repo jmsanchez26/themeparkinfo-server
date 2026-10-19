@@ -1,12 +1,14 @@
 const { createHash, randomBytes, randomUUID } = require('node:crypto');
 const { rateLimit } = require('express-rate-limit');
 const { RETENTION_MS } = require('./alert-store');
+const alertRules = require('../public/assets/js/alertRules');
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 const asyncRoute = fn => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
 const fail = (status, message) => Object.assign(new Error(message), { status, publicMessage: message });
 const validWait = value => typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 300;
 const validToken = value => typeof value === 'string' && /^[A-Za-z0-9_:.-]{20,4096}$/.test(value);
+const validMode = mode => mode === 'threshold' || mode === 'good_time';
 
 function registerAlertApi(app, { store, cache, snapshot, messaging }) {
   const pending = new Map();
@@ -87,8 +89,8 @@ function registerAlertApi(app, { store, cache, snapshot, messaging }) {
     res.json({ data });
   });
   app.post('/api/alerts', asyncRoute(async (req, res) => {
-    const { park, rideId, waitTime } = req.body || {};
-    if (typeof park !== 'string' || !Object.hasOwn(cache, park) || typeof rideId !== 'string' || rideId.length > 150 || !validWait(waitTime)) throw fail(400, 'Invalid alert. Use a supported ride and a wait from 0 to 300 minutes.');
+    const { park, rideId, waitTime, mode = 'threshold' } = req.body || {};
+    if (!validMode(mode) || typeof park !== 'string' || !Object.hasOwn(cache, park) || typeof rideId !== 'string' || rideId.length > 150 || (mode === 'threshold' && !validWait(waitTime))) throw fail(400, 'Invalid alert. Choose an alert type and, for a wait threshold, 0 to 300 minutes.');
     const ride = cache[park].data?.liveData?.find(r => r.id === rideId && r.entityType === 'ATTRACTION');
     if (!ride || typeof ride.name !== 'string' || ride.name.length > 250) throw fail(400, 'Ride is unavailable. Refresh the park and try again.');
     await store.transaction(state => {
@@ -96,22 +98,36 @@ function registerAlertApi(app, { store, cache, snapshot, messaging }) {
       if (!device) throw fail(403, 'Verify this device before saving push alerts');
       const existing = state.alerts.find(a => a.ownerHash === req.ownerHash && a.park === park && a.rideId === rideId);
       if (existing) {
-        existing.waitTime = waitTime;
+        if ((existing.mode || 'threshold') !== mode) {
+          delete existing.triggeredAt;
+          existing.lastObservedWait = alertRules.observation(ride);
+        }
+        existing.mode = mode;
+        existing.waitTime = mode === 'threshold' ? waitTime : null;
         existing.updatedAt = new Date().toISOString();
         // Do not reset notification delivery on repeated identical requests.
       } else {
         if (state.alerts.filter(a => a.ownerHash === req.ownerHash).length >= 50 || state.alerts.length >= 10000) throw fail(429, 'Alert limit reached');
-        state.alerts.push({ id: randomUUID(), ownerHash: req.ownerHash, deviceToken: device.token, park, rideId, name: ride.name, waitTime, createdAt: new Date().toISOString() });
+        state.alerts.push({ id: randomUUID(), ownerHash: req.ownerHash, deviceToken: device.token, park, rideId, name: ride.name,
+          mode, waitTime: mode === 'threshold' ? waitTime : null, lastObservedWait: alertRules.observation(ride), createdAt: new Date().toISOString() });
       }
     });
     res.status(201).json({ success: true });
   }));
   app.patch('/api/alerts/:id', asyncRoute(async (req, res) => {
-    if (!validWait(req.body?.waitTime)) throw fail(400, 'Enter a whole number from 0 to 300');
+    const requestedMode = req.body?.mode;
+    if (requestedMode !== undefined && !validMode(requestedMode)) throw fail(400, 'Invalid alert type');
     const alert = await store.transaction(state => {
       const alert = state.alerts.find(a => a.ownerHash === req.ownerHash && a.id === req.params.id);
       if (!alert) throw fail(404, 'Alert not found');
-      alert.waitTime = req.body.waitTime;
+      const mode = requestedMode || alert.mode || 'threshold';
+      if (mode === 'threshold' && !validWait(req.body?.waitTime)) throw fail(400, 'Enter a whole number from 0 to 300');
+      if ((alert.mode || 'threshold') !== mode) {
+        delete alert.triggeredAt;
+        alert.lastObservedWait = alertRules.observation(cache[alert.park]?.data?.liveData?.find(ride => ride.id === alert.rideId));
+      }
+      alert.mode = mode;
+      alert.waitTime = mode === 'threshold' ? req.body.waitTime : null;
       alert.updatedAt = new Date().toISOString();
       return alert;
     });
