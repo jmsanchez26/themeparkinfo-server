@@ -4,6 +4,40 @@
 
 const parkHoursCache =
   JSON.parse(localStorage.getItem("parkHoursCache")) || {};
+let parkHoursRequest = 0;
+
+function formatParkEventTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric', minute: '2-digit', hour12: true,
+    timeZone: timeZone, timeZoneName: 'short'
+  }).format(date);
+}
+
+function setParkEventHours(events) {
+  const details = document.querySelector('.park-hours-container .hours-details');
+  if (!details) return;
+  let container = details.querySelector('.park-event-hours');
+  if (!container) {
+    container = document.createElement('div');
+    container.className = 'park-event-hours';
+    details.appendChild(container);
+  }
+  container.replaceChildren();
+  (Array.isArray(events) ? events : []).forEach(event => {
+    const line = document.createElement('span');
+    line.className = 'park-event-hours-line';
+    const title = document.createElement('span');
+    title.className = 'park-event-title';
+    title.textContent = event.description;
+    const hours = document.createElement('span');
+    hours.className = 'park-event-time';
+    hours.textContent = event.open + ' – ' + event.close;
+    line.append(title, hours);
+    container.appendChild(line);
+  });
+}
 
 const PARK_HOURS_TITLES = {
   mg: "Magic Kingdom Hours",
@@ -35,12 +69,14 @@ function updateParkHoursTheme(parkKey) {
  * GET PARK HOURS (CACHED)
  *************************/
 async function getParkHours(givenparkName) {
+  const request = ++parkHoursRequest;
   
   // Normalize incoming names
   if (givenparkName === "magic-kingdom") givenparkName = "mg";
   else if (givenparkName === "animalKingdom") givenparkName = "ak";
 
   updateParkHoursTheme(givenparkName);
+  setParkEventHours([]);
 
   const parkId = PARK_IDS[givenparkName];
 
@@ -56,14 +92,15 @@ async function getParkHours(givenparkName) {
   const cacheKey = `${parkId}_${today}`;
 
   //Use cache if available
-  if (parkHoursCache[cacheKey]) {
+  if (parkHoursCache[cacheKey]?.version === 2 && Date.now() - parkHoursCache[cacheKey].fetchedAt < 15 * 60 * 1000) {
     const cached = parkHoursCache[cacheKey];
     setParkHours(
       cached.earlyEntry,
       cached.open,
       cached.close,
       cached.extOpen,
-      cached.extClose
+      cached.extClose,
+      cached.events
     );
     return;
   }
@@ -108,6 +145,12 @@ async function getParkHours(givenparkName) {
     });
 
     const payload = {
+      version: 2,
+      fetchedAt: Date.now(),
+      events: ['usfl', 'usHollywood'].includes(givenparkName) ? todaySchedules
+        .filter(item => ['TICKETED_EVENT', 'INFO'].includes(item.type) && /halloween horror nights|\bhhn\b/i.test(item.description || ''))
+        .map(item => ({ description: item.description, open: formatParkEventTime(item.openingTime), close: formatParkEventTime(item.closingTime) }))
+        .filter(event => event.open && event.close) : [],
       earlyEntry: earlyEntry
         ? formatter.format(new Date(earlyEntry.openingTime))
         : "N/A",
@@ -128,12 +171,14 @@ async function getParkHours(givenparkName) {
       JSON.stringify(parkHoursCache)
     );
 
+    if (request !== parkHoursRequest) return;
     setParkHours(
       payload.earlyEntry,
       payload.open,
       payload.close,
       payload.extOpen,
-      payload.extClose
+      payload.extClose,
+      payload.events
     );
 
   } catch (err) {
@@ -149,12 +194,14 @@ function setParkHours(
   open,
   close,
   extOpen = null,
-  extClose = null
+  extClose = null,
+  events = []
 ) {
 
   const earlyEntryEl = document.querySelector(".early-entry");
   const openHoursEl = document.querySelector(".open-hours");
   const extendedEl = document.querySelector(".ext-hours");
+  setParkEventHours(events);
 
   if(earlyEntryEl && earlyEntry){
     earlyEntryEl.textContent = `Early Entry: ${earlyEntry}`;

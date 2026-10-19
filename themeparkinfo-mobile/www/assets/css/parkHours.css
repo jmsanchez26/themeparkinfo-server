@@ -174,3 +174,9 @@
     font-size: 0.84rem;
   }
 }
+
+.park-event-hours { display: flex; flex-direction: column; gap: 4px; }
+.park-event-hours-line { display: block; white-space: normal; overflow-wrap: anywhere; }
+
+.park-event-title, .park-event-time { display: block; }
+.park-event-title { font-weight: 700; }
