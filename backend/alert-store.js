@@ -9,6 +9,7 @@ class AlertStore {
     this.file = file;
     this.state = { version: 1, devices: [], alerts: [] };
     this.pending = Promise.resolve();
+    this.serialized = null;
   }
 
   async load() {
@@ -19,6 +20,7 @@ class AlertStore {
         throw new Error('Invalid secure alert store');
       }
       this.state = state;
+      this.serialized = JSON.stringify(state);
     } catch (error) {
       // Fail closed on corruption/permission errors. Never overwrite a damaged store.
       if (error.code !== 'ENOENT') throw error;
@@ -34,20 +36,28 @@ class AlertStore {
       Date.parse(alert.updatedAt || alert.createdAt) > now - RETENTION_MS);
   }
 
-  transaction(change) {
+  transaction(change, { when } = {}) {
     const operation = this.pending.then(async () => {
+      // Check the current committed state inside the queue, before cloning it.
+      if (when && !when(this.state)) return;
       const next = structuredClone(this.state);
       this.prune(next);
       const result = await change(next);
+      const serialized = JSON.stringify(next);
+      if (serialized === this.serialized) {
+        this.state = next;
+        return result;
+      }
       const temporary = `${this.file}.${randomUUID()}.tmp`;
       try {
-        await fs.writeFile(temporary, JSON.stringify(next), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+        await fs.writeFile(temporary, serialized, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
         await fs.rename(temporary, this.file);
       } catch (error) {
         await fs.unlink(temporary).catch(() => {});
         throw error;
       }
       this.state = next;
+      this.serialized = serialized;
       return result;
     });
     this.pending = operation.catch(() => {});

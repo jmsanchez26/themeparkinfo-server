@@ -10,11 +10,19 @@ const validWait = value => typeof value === 'number' && Number.isInteger(value) 
 const validToken = value => typeof value === 'string' && /^[A-Za-z0-9_:.-]{20,4096}$/.test(value);
 const validMode = mode => mode === 'threshold' || mode === 'good_time';
 
-function registerAlertApi(app, { store, cache, snapshot, messaging }) {
+function registerAlertApi(app, { store, cache, snapshot, messaging, verificationLimits = {} }) {
   const pending = new Map();
+  const capacity = { anonymousPending: 150, registeredPending: 50, anonymousSends: 8, registeredSends: 4, ...verificationLimits };
+  const activeSends = { anonymous: 0, registered: 0 };
   const limiter = rateLimit({ windowMs: 60000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false });
-  const challengeLimiter = rateLimit({ windowMs: 15 * 60000, limit: 5, standardHeaders: 'draft-8', legacyHeaders: false });
-  const globalChallenges = rateLimit({ windowMs: 60 * 60000, limit: 200, keyGenerator: () => 'all', validate: false });
+  const challengeLimiter = rateLimit({ windowMs: 15 * 60000, limit: 5, skip: req => req.registeredOwner, standardHeaders: 'draft-8', legacyHeaders: false });
+  const ownerChallengeLimiter = rateLimit({ windowMs: 15 * 60000, limit: 3, keyGenerator: req => req.ownerHash, standardHeaders: 'draft-8', legacyHeaders: false });
+  const tokenChallengeLimiter = rateLimit({
+    windowMs: 15 * 60000, limit: 3,
+    keyGenerator: req => req.registeredOwner ? `registered:${req.ownerHash}:${req.challengeTokenHash}` : `anonymous:${req.challengeTokenHash}`,
+    standardHeaders: 'draft-8', legacyHeaders: false
+  });
+  const mutationLimiter = rateLimit({ windowMs: 60000, limit: 30, keyGenerator: req => req.ownerHash, standardHeaders: 'draft-8', legacyHeaders: false });
   function identity(req, res, next) {
     res.set('Cache-Control', 'no-store');
     const match = /^Bearer ([a-f0-9]{64})$/.exec(req.get('Authorization') || '');
@@ -22,26 +30,43 @@ function registerAlertApi(app, { store, cache, snapshot, messaging }) {
     req.ownerHash = hash(match[1]);
     next();
   }
-  app.use(['/api/alerts', '/api/alert-devices'], limiter, identity);
+  app.use(['/api/alerts', '/api/alert-devices'], (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); }, limiter, identity);
+  app.use(['/api/alerts', '/api/alert-devices'], (req, res, next) => {
+    if (['POST', 'PATCH', 'DELETE'].includes(req.method) && !req.path.endsWith('/challenge')) return mutationLimiter(req, res, next);
+    next();
+  });
 
-  app.post('/api/alert-devices/challenge', challengeLimiter, globalChallenges, asyncRoute(async (req, res) => {
+  app.post('/api/alert-devices/challenge', (req, res, next) => {
     const token = req.body?.deviceToken;
-    if (!validToken(token)) throw fail(400, 'Invalid notification token');
-    const sender = messaging();
-    if (!sender) throw fail(503, 'Push notifications are not configured');
+    if (!validToken(token)) return next(fail(400, 'Invalid notification token'));
+    req.challengeSender = messaging();
+    if (!req.challengeSender) return next(fail(503, 'Push notifications are not configured'));
+    req.registeredOwner = store.state.devices.some(device => device.ownerHash === req.ownerHash && device.expiresAt > Date.now());
+    req.challengeTokenHash = hash(token);
+    next();
+  }, challengeLimiter, ownerChallengeLimiter, tokenChallengeLimiter, asyncRoute(async (req, res) => {
+    const token = req.body.deviceToken;
+    const sender = req.challengeSender;
     const now = Date.now();
     for (const [id, entry] of pending) if (entry.expiresAt <= now) pending.delete(id);
-    if (pending.size >= 200) throw fail(429, 'Try again later');
     if ([...pending.values()].some(entry => entry.ownerHash === req.ownerHash)) throw fail(429, 'A device verification is already pending. Try again in two minutes.');
+    const lane = req.registeredOwner ? 'registered' : 'anonymous';
+    const pendingCount = [...pending.values()].filter(entry => entry.lane === lane).length;
+    if (pendingCount >= capacity[`${lane}Pending`] || activeSends[lane] >= capacity[`${lane}Sends`]) {
+      throw fail(429, 'Device verification is busy. Please try again shortly.');
+    }
     const challengeId = randomUUID();
     const proof = randomBytes(32).toString('hex');
-    pending.set(challengeId, { ownerHash: req.ownerHash, token, proofHash: hash(proof), expiresAt: now + 120000 });
+    pending.set(challengeId, { ownerHash: req.ownerHash, token, proofHash: hash(proof), lane, expiresAt: now + 120000 });
+    activeSends[lane]++;
     try {
       // The proof is delivered ONLY through push, never returned to the HTTP caller.
       await sender.send({ token, data: { source: 'device-verification', challengeId, proof }, android: { priority: 'high', ttl: 120000 } });
     } catch {
       pending.delete(challengeId);
       throw fail(502, 'Could not verify this device for push notifications');
+    } finally {
+      activeSends[lane]--;
     }
     res.status(202).json({ challengeId });
   }));
@@ -76,7 +101,7 @@ function registerAlertApi(app, { store, cache, snapshot, messaging }) {
     await store.transaction(state => {
       state.devices = state.devices.filter(d => d.ownerHash !== req.ownerHash);
       state.alerts = state.alerts.filter(a => a.ownerHash !== req.ownerHash);
-    });
+    }, { when: state => state.devices.some(d => d.ownerHash === req.ownerHash) || state.alerts.some(a => a.ownerHash === req.ownerHash) });
     for (const [id, entry] of pending) if (entry.ownerHash === req.ownerHash) pending.delete(id);
     res.json({ success: true });
   }));
@@ -93,6 +118,7 @@ function registerAlertApi(app, { store, cache, snapshot, messaging }) {
     if (!validMode(mode) || typeof park !== 'string' || !Object.hasOwn(cache, park) || typeof rideId !== 'string' || rideId.length > 150 || (mode === 'threshold' && !validWait(waitTime))) throw fail(400, 'Invalid alert. Choose an alert type and, for a wait threshold, 0 to 300 minutes.');
     const ride = cache[park].data?.liveData?.find(r => r.id === rideId && r.entityType === 'ATTRACTION');
     if (!ride || typeof ride.name !== 'string' || ride.name.length > 250) throw fail(400, 'Ride is unavailable. Refresh the park and try again.');
+    if (!store.state.devices.some(d => d.ownerHash === req.ownerHash && d.expiresAt > Date.now())) throw fail(403, 'Verify this device before saving push alerts');
     await store.transaction(state => {
       const device = state.devices.find(d => d.ownerHash === req.ownerHash);
       if (!device) throw fail(403, 'Verify this device before saving push alerts');
@@ -117,6 +143,7 @@ function registerAlertApi(app, { store, cache, snapshot, messaging }) {
   app.patch('/api/alerts/:id', asyncRoute(async (req, res) => {
     const requestedMode = req.body?.mode;
     if (requestedMode !== undefined && !validMode(requestedMode)) throw fail(400, 'Invalid alert type');
+    if (!store.state.alerts.some(a => a.ownerHash === req.ownerHash && a.id === req.params.id)) throw fail(404, 'Alert not found');
     const alert = await store.transaction(state => {
       const alert = state.alerts.find(a => a.ownerHash === req.ownerHash && a.id === req.params.id);
       if (!alert) throw fail(404, 'Alert not found');
@@ -134,6 +161,7 @@ function registerAlertApi(app, { store, cache, snapshot, messaging }) {
     res.json({ success: true, data: snapshot(alert) });
   }));
   app.delete('/api/alerts/:id', asyncRoute(async (req, res) => {
+    if (!store.state.alerts.some(a => a.ownerHash === req.ownerHash && a.id === req.params.id)) throw fail(404, 'Alert not found');
     await store.transaction(state => {
       const index = state.alerts.findIndex(a => a.ownerHash === req.ownerHash && a.id === req.params.id);
       if (index < 0) throw fail(404, 'Alert not found');

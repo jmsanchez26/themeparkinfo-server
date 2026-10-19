@@ -7,6 +7,7 @@ const { AlertStore } = require("./alert-store");
 const { registerAlertApi } = require("./alert-api");
 const { fetchParkData, useHostedParkData } = require("./park-data");
 const alertRules = require("../public/assets/js/alertRules");
+const { createPublicApiLimiter } = require("./api-limits");
 require("dotenv").config();
 
 let firebaseAdmin = null;
@@ -503,7 +504,7 @@ async function updateCache() {
 
 registerAlertApi(app, { store: alertStore, cache, snapshot: buildAlertSnapshot, messaging: () => pushState.messaging });
 
-app.get("/api/:park", (req, res) => {
+app.get("/api/:park", createPublicApiLimiter(), (req, res) => {
   const park = normalizeParkKey(req.params.park);
 
   console.log(`API request for: ${park}`);
