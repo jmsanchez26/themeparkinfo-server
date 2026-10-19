@@ -1,6 +1,25 @@
 (function () {
   const key = 'privateAlertCredentialV1';
-  function credential() {
+  const android = window.Capacitor?.isNativePlatform?.() && window.Capacitor?.getPlatform?.() === 'android';
+  let androidCredential;
+  function secureStorage() {
+    const plugin = window.Capacitor?.Plugins?.AlertCredential;
+    if (!plugin) throw new Error('Android secure alert storage is unavailable. Please update the app.');
+    return plugin;
+  }
+  async function credential() {
+    if (android) {
+      if (!androidCredential) {
+        androidCredential = (async () => {
+          const result = await secureStorage().getOrCreate({ legacyCredential: localStorage.getItem(key) });
+          if (!/^[a-f0-9]{64}$/.test(result?.credential || '')) throw new Error('Invalid secure alert credential');
+          // Remove plaintext only after native storage has persisted the same identity.
+          localStorage.removeItem(key);
+          return result.credential;
+        })().catch(error => { androidCredential = null; throw error; });
+      }
+      return androidCredential;
+    }
     let value = localStorage.getItem(key);
     if (!/^[a-f0-9]{64}$/.test(value || '')) {
       value = Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('');
@@ -12,7 +31,7 @@
     if (!/^\/api\/(alerts|alert-devices)(\/|$)/.test(path)) throw new Error('Invalid private API path');
     const response = await fetch((window.__API_BASE__ || '') + path, {
       ...options, cache: 'no-store', referrerPolicy: 'no-referrer',
-      headers: { ...options.headers, Authorization: 'Bearer ' + credential() }
+      headers: { ...options.headers, Authorization: 'Bearer ' + await credential() }
     });
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
@@ -61,6 +80,10 @@
   }
   window.AlertSecurity = { request, verifyDevice, async deleteAll() {
     await request('/api/alert-devices', { method: 'DELETE' });
+    if (android) {
+      await secureStorage().clear();
+      androidCredential = null;
+    }
     await window.Capacitor?.Plugins?.PushNotifications?.unregister?.();
     localStorage.removeItem('pushDeviceToken');
     localStorage.removeItem('waitTimeAlerts');
