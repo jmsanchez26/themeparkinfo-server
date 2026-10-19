@@ -1,10 +1,10 @@
 (function () {
   const baseUrl = window.__API_BASE__ || "";
   const endpoints = [
-    { label: "Walt Disney World", url: `${baseUrl}/api/wdw` },
-    { label: "Disneyland Resort", url: `${baseUrl}/api/disneyland` },
-    { label: "Universal Orlando", url: `${baseUrl}/api/usOrlando` },
-    { label: "Universal Hollywood", url: `${baseUrl}/api/hollywood` }
+    { label: "Walt Disney World", timezone: "America/New_York", url: `${baseUrl}/api/wdw` },
+    { label: "Disneyland Resort", timezone: "America/Los_Angeles", url: `${baseUrl}/api/disneyland` },
+    { label: "Universal Orlando", timezone: "America/New_York", url: `${baseUrl}/api/usOrlando` },
+    { label: "Universal Hollywood", timezone: "America/Los_Angeles", url: `${baseUrl}/api/hollywood` }
   ];
 
   const parkNames = {
@@ -67,14 +67,15 @@
     return parkNames[parkId] || resortLabel;
   }
 
-  function formatTime(isoString) {
+  function formatTime(isoString, timezone) {
     const parsed = new Date(isoString);
     if (Number.isNaN(parsed.getTime())) return "TBD";
-
-    return parsed.toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit"
-    });
+    const parts = new Intl.DateTimeFormat("en-US", {
+      hour: "numeric", minute: "2-digit", hour12: true,
+      timeZone: timezone, timeZoneName: "short"
+    }).formatToParts(parsed);
+    const part = type => parts.find(item => item.type === type)?.value || "";
+    return part("hour") + ":" + part("minute") + " " + part("dayPeriod") + " " + part("timeZoneName");
   }
 
   function formatWait(waitTime) {
@@ -190,9 +191,9 @@
     const container = document.querySelector(`[data-hours-card="${key}"]`);
     if (!container) return;
 
-    container.innerHTML = lines.map((line, index) => `
+    container.innerHTML = window.SafeHTML.sanitize(lines.map((line, index) => `
       <span class="park-hours-line ${index === 0 ? "primary" : ""} ${line.empty ? "empty" : ""}">${line.text}</span>
-    `).join("");
+    `).join(""));
   }
 
   async function loadParkHoursCards() {
@@ -258,21 +259,21 @@
     if (!featuredCard) return;
 
     if (!ride) {
-      featuredCard.innerHTML = `
+      featuredCard.innerHTML = window.SafeHTML.sanitize(`
         <span class="tag">No live waits yet</span>
         <h3>Check back soon</h3>
         <p>We could not find a live ride wait just now.</p>
         <strong>--</strong>
-      `;
+      `);
       return;
     }
 
-    featuredCard.innerHTML = `
+    featuredCard.innerHTML = window.SafeHTML.sanitize(`
       <span class="tag">${ride.park}</span>
-      <h3>${ride.name}</h3>
+      <h3>${window.SafeHTML.text(ride.name)}</h3>
       <p>Lowest current standby wait</p>
       <strong>${ride.waitTime} min</strong>
-    `;
+    `);
   }
 
   function renderLowestWaits(rides) {
@@ -280,20 +281,20 @@
     if (!container) return;
 
     if (!rides.length) {
-      container.innerHTML = `<div class="empty-state">No live ride waits are available right now.</div>`;
+      container.innerHTML = window.SafeHTML.sanitize(`<div class="empty-state">No live ride waits are available right now.</div>`);
       return;
     }
 
-    container.innerHTML = rides.slice(0, 6).map(ride => `
+    container.innerHTML = window.SafeHTML.sanitize(rides.slice(0, 6).map(ride => `
       <div class="attraction-card">
         <div>
-          <h3>${ride.name}</h3>
+          <h3>${window.SafeHTML.text(ride.name)}</h3>
           <p>Lowest wait right now</p>
           <span class="park-label">${ride.park}</span>
         </div>
         <span class="wait ${ride.waitTime <= 20 ? "low" : ride.waitTime >= 50 ? "high" : ""}">${ride.waitTime} min</span>
       </div>
-    `).join("");
+    `).join(""));
   }
 
   function renderEvents(events) {
@@ -301,20 +302,20 @@
     if (!container) return;
 
     if (!events.length) {
-      container.innerHTML = `<div class="empty-state">No parade or nighttime show times are available right now.</div>`;
+      container.innerHTML = window.SafeHTML.sanitize(`<div class="empty-state">No parade or nighttime show times are available right now.</div>`);
       return;
     }
 
-    container.innerHTML = events.slice(0, 6).map(event => `
+    container.innerHTML = window.SafeHTML.sanitize(events.slice(0, 6).map(event => `
       <div class="event-card">
         <div>
-          <h3>${event.name}</h3>
+          <h3>${window.SafeHTML.text(event.name)}</h3>
           <p>Next upcoming time</p>
           <span class="event-park">${event.park}</span>
         </div>
-        <span class="event-time">${formatTime(event.time)}</span>
+        <span class="event-time">${formatTime(event.time, event.timezone)}</span>
       </div>
-    `).join("");
+    `).join(""));
   }
 
   function renderFavoriteRides(rides) {
@@ -322,22 +323,22 @@
     if (!container) return;
 
     if (!rides.length) {
-      container.innerHTML = `
+      container.innerHTML = window.SafeHTML.sanitize(`
         <div class="saved-alert-card empty">
           <div>
             <h3>No favorite rides yet</h3>
             <p>Star rides on any park page and they will show up here.</p>
           </div>
         </div>
-      `;
+      `);
       return;
     }
 
-    container.innerHTML = rides.map(ride => `
+    container.innerHTML = window.SafeHTML.sanitize(rides.map(ride => `
       <a class="saved-alert-card" href="${buildFavoriteRideHref(ride.park)}">
         <div class="saved-alert-head">
           <div class="saved-alert-title-row">
-            <h3>${ride.name}</h3>
+            <h3>${window.SafeHTML.text(ride.name)}</h3>
             <span class="saved-alert-chip ${ride.status?.toLowerCase() === "operating" ? "watching" : "hit"}">
               ${ride.status?.toLowerCase() === "operating" ? "Open" : (ride.status || "Unknown")}
             </span>
@@ -368,7 +369,7 @@
           Favorite ride from your park pages
         </div>
       </a>
-    `).join("");
+    `).join(""));
   }
 
   function renderSavedAlerts(alerts) {
@@ -376,22 +377,22 @@
     if (!container) return;
 
     if (!alerts.length) {
-      container.innerHTML = `
+      container.innerHTML = window.SafeHTML.sanitize(`
         <a class="saved-alert-card empty" href="${ALERTS_PAGE_PATH}">
           <div>
             <h3>No saved alerts yet</h3>
             <p>Set a wait time alert on a park page and it will show up here.</p>
           </div>
         </a>
-      `;
+      `);
       return;
     }
 
-    container.innerHTML = alerts.map(alert => `
+    container.innerHTML = window.SafeHTML.sanitize(alerts.map(alert => `
       <a class="saved-alert-card" href="${ALERTS_PAGE_PATH}">
         <div class="saved-alert-head">
           <div class="saved-alert-title-row">
-            <h3>${alert.name}</h3>
+            <h3>${window.SafeHTML.text(alert.name)}</h3>
             <span class="saved-alert-chip ${alert.isTriggered ? "hit" : "watching"}">
               ${alert.isTriggered ? "Hit" : "Watching"}
             </span>
@@ -433,7 +434,7 @@
           ${alert.isTriggered ? "This alert already hit. Open Alerts for details." : "Open Alerts to update or delete this alert."}
         </div>
       </a>
-    `).join("");
+    `).join(""));
   }
 
   function getFavoriteRideKeys() {
@@ -455,7 +456,6 @@
         return liveData
           .filter(item => item.entityType === "ATTRACTION")
           .map(item => ({
-            key: `${Object.keys(parkNames).includes(item.parkId) ? Object.keys(PARK_IDS || {}).find?.(() => false) : ""}`,
             name: item.name,
             favoriteKeyCandidates: [
               `mg::${item.id || item.name}`,
@@ -513,7 +513,7 @@
           (statusLower && statusLower !== "operating");
 
         return {
-          id: `local-${alert.name}`,
+          id: `local-${window.SafeHTML.text(alert.name)}`,
           name: alert.name,
           parkLabel: match.parkLabel,
           currentWait: match.currentWait,
@@ -549,9 +549,9 @@
   async function loadSavedAlerts(results) {
     const deviceToken = getStoredPushToken();
 
-    if (deviceToken) {
+    if (deviceToken && window.Capacitor?.getPlatform?.() === "android") {
       try {
-        const response = await fetch(`${baseUrl}/api/alerts?deviceToken=${encodeURIComponent(deviceToken)}`, {
+        const response = await window.AlertSecurity.request("/api/alerts", {
           cache: "no-store"
         });
 
@@ -592,7 +592,7 @@
       .sort((a, b) => a.waitTime - b.waitTime);
   }
 
-  function extractEvents(payload, resortLabel) {
+  function extractEvents(payload, resortLabel, timezone) {
     const liveData = payload?.data?.liveData || [];
     const now = Date.now();
 
@@ -612,7 +612,8 @@
         return {
           name: item.name,
           park: formatParkLabel(item.parkId, resortLabel),
-          time: nextShow.toISOString()
+          time: nextShow.toISOString(),
+          timezone
         };
       })
       .filter(Boolean)
@@ -644,7 +645,7 @@
         .sort((a, b) => a.waitTime - b.waitTime);
 
       const events = results
-        .flatMap(({ endpoint, payload }) => extractEvents(payload, endpoint.label))
+        .flatMap(({ endpoint, payload }) => extractEvents(payload, endpoint.label, endpoint.timezone))
         .sort((a, b) => new Date(a.time) - new Date(b.time));
       const favoriteRides = buildFavoriteRides(results);
       const savedAlerts = await loadSavedAlerts(results);
@@ -665,4 +666,9 @@
   }
 
   document.addEventListener("DOMContentLoaded", loadHomepageData);
+  // Restore saved items after back navigation and changes made in another tab.
+  window.addEventListener("pageshow", event => { if (event.persisted) loadHomepageData(); });
+  window.addEventListener("storage", event => {
+    if (["favoriteRideKeys", "waitTimeAlerts"].includes(event.key) || event.key === null) loadHomepageData();
+  });
 })();

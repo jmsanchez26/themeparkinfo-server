@@ -21,7 +21,7 @@ const pushRegistrationState = {
 };
 
 function canUseServerSidePush() {
-  return Boolean(isNativeApp && window.__API_BASE__ && pushNotifications);
+  return Boolean(isNativeApp && window.Capacitor.getPlatform() === "android" && window.__API_BASE__ && pushNotifications);
 }
 
 function getStoredPushToken() {
@@ -72,7 +72,7 @@ async function attachPushListeners() {
   });
 
   await pushNotifications.addListener("pushNotificationReceived", async notification => {
-    if (!localNotifications) return;
+    if (!localNotifications || notification.data?.source === "device-verification") return;
 
     try {
       const permission = await localNotifications.requestPermissions();
@@ -135,101 +135,64 @@ async function initializePushNotifications() {
         name: "Foreground Wait Alerts",
         description: "Shows wait time alerts while the app is open.",
         importance: 5,
-        visibility: 1
+        visibility: 0
       });
     } catch (error) {
       console.warn("Could not create local notification channel:", error);
     }
   }
 
-  const storedToken = pushRegistrationState.token || getStoredPushToken();
-  if (storedToken) {
-    pushRegistrationState.token = storedToken;
-    return storedToken;
-  }
-
-  await attachPushListeners();
-
-  const permission = await pushNotifications.requestPermissions();
-  if (permission.receive !== "granted") {
-    throw new Error("Notification permission not granted");
-  }
-
-  await pushNotifications.register();
   return ensurePushToken();
 }
 
 async function ensurePushToken() {
   if (!canUseServerSidePush()) return null;
-
-  const storedToken = pushRegistrationState.token || getStoredPushToken();
-  if (storedToken) {
-    pushRegistrationState.token = storedToken;
-    return storedToken;
-  }
-
-  if (pushRegistrationState.token) return pushRegistrationState.token;
   if (pushRegistrationState.pending) return pushRegistrationState.pending;
-
-  pushRegistrationState.pending = new Promise(async (resolve, reject) => {
-    let settled = false;
-    let timeoutId;
-
-    const cleanup = () => {
-      clearTimeout(timeoutId);
-    };
-
+  pushRegistrationState.pending = (async () => {
+    await attachPushListeners();
+    const permission = await pushNotifications.requestPermissions();
+    if (permission.receive !== "granted") throw new Error("Notification permission not granted");
+    let timer, registrationListener, errorListener;
+    let resolveToken, rejectToken;
+    const registered = new Promise((resolve, reject) => { resolveToken = resolve; rejectToken = reject; });
+    registered.catch(() => {});
     try {
-      await attachPushListeners();
-
-      timeoutId = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        const latestToken = pushRegistrationState.token || getStoredPushToken();
-        if (latestToken) {
-          pushRegistrationState.token = latestToken;
-          resolve(latestToken);
-          return;
-        }
-        reject(new Error("Push registration timed out"));
-      }, 10000);
-
-      const token = await initializePushNotifications();
-      settled = true;
-      cleanup();
-      resolve(token);
-    } catch (error) {
-      settled = true;
-      cleanup();
-      reject(error);
+      registrationListener = await pushNotifications.addListener("registration", token => resolveToken(token.value));
+      errorListener = await pushNotifications.addListener("registrationError", () => rejectToken(new Error("Push registration failed")));
+      timer = setTimeout(() => rejectToken(new Error("Push registration timed out")), 15000);
+      await pushNotifications.register();
+      const token = await registered;
+      storePushToken(token);
+      return token;
+    } finally {
+      clearTimeout(timer);
+      await registrationListener?.remove();
+      await errorListener?.remove();
     }
-  }).finally(() => {
-    pushRegistrationState.pending = null;
-  });
-
+  })().finally(() => { pushRegistrationState.pending = null; });
   return pushRegistrationState.pending;
 }
 
 async function saveServerSideAlert(item, waitTime) {
-  const deviceToken = await ensurePushToken();
+  const deviceToken = await initializePushNotifications();
 
   if (!deviceToken) {
     throw new Error("Push notifications were not granted on this device");
   }
 
+  await window.AlertSecurity.verifyDevice(deviceToken, pushNotifications);
+
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      const response = await fetch(`${window.__API_BASE__}/api/alerts`, {
+      const response = await window.AlertSecurity.request("/api/alerts", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          park: alertVar,
-          name: item.name,
-          waitTime,
-          deviceToken
+          park: alertVar.toLowerCase() === "ushollywood" ? "hollywood" : alertVar.toLowerCase(),
+          rideId: item.id,
+          waitTime
         })
       });
 
@@ -262,9 +225,9 @@ async function saveServerSideAlert(item, waitTime) {
 function openSetAlertModal(item) {
   const modal = document.querySelector(".waitTimeAlertModal");
 
-  modal.innerHTML = `
+  modal.innerHTML = window.SafeHTML.sanitize(`
     <div class="modalInner">
-      <h3>${item.name}</h3>
+      <h3>${window.SafeHTML.text(item.name)}</h3>
       <p>Current wait: ${item.waitTime} min</p>
 
       <label>Alert me when wait time is</label>
@@ -276,7 +239,7 @@ function openSetAlertModal(item) {
         <button id="saveAlertBtn">Save</button>
       </div>
     </div>
-  `;
+  `);
 
   modal.style.display = "flex";
 
@@ -288,8 +251,8 @@ function openSetAlertModal(item) {
     const saveButton = document.getElementById("saveAlertBtn");
     const errorMessage = document.getElementById("alertErrorMsg");
     const value = parseInt(document.getElementById("alertValue").value, 10);
-    if (!value) {
-      errorMessage.textContent = "Enter a wait time in minutes.";
+    if (!Number.isInteger(value) || value < 0 || value > 300) {
+      errorMessage.textContent = "Enter a whole number from 0 to 300 minutes.";
       errorMessage.style.display = "block";
       return;
     }
@@ -327,7 +290,7 @@ function openSetAlertModal(item) {
  * CHECK ALERTS
  *************************/
 function checkAlerts(park) {
-  if (isNativeApp && pushNotifications) return;
+  if (canUseServerSidePush()) return;
   if (!waitTimeAlerts.length) return;
 
   // Build allItems based on the park
@@ -396,13 +359,13 @@ function openTriggeredModal(alerts) {
   const modal = document.querySelector(".waitTimeAlertModal");
   if (!modal) return;
 
-  modal.innerHTML = `
+  modal.innerHTML = window.SafeHTML.sanitize(`
     <div class="modalInner">
       <h2>Wait Time Alerts</h2>
 
       ${alerts.map(a => `
         <div class="alertBlock">
-          <strong>${a.name}</strong>
+          <strong>${window.SafeHTML.text(a.name)}</strong>
           ${
             a.isDown
               ? `<p class="alert-down">Status: Currently Down</p>`
@@ -413,7 +376,7 @@ function openTriggeredModal(alerts) {
 
       <button id="closeModalBtn">OK</button>
     </div>
-  `;
+  `);
 
   modal.style.display = "flex";
 
@@ -427,12 +390,4 @@ document.addEventListener("click", e => {
   if (!header) return;
 
   header.parentElement.classList.toggle("open");
-});
-
-document.addEventListener("DOMContentLoaded", () => {
-  if (!canUseServerSidePush()) return;
-
-  initializePushNotifications().catch(error => {
-    console.error("Push init failed:", error);
-  });
 });

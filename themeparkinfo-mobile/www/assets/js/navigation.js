@@ -13,8 +13,8 @@ function loadSiteComponents() {
 
   Promise.all([fetchHeader, fetchFooter])
     .then(([headerHtml, footerHtml]) => {
-      if (headerPlaceholder) headerPlaceholder.innerHTML = headerHtml;
-      if (footerPlaceholder) footerPlaceholder.innerHTML = footerHtml;
+      if (headerPlaceholder) headerPlaceholder.innerHTML = window.SafeHTML.sanitize(headerHtml);
+      if (footerPlaceholder) footerPlaceholder.innerHTML = window.SafeHTML.sanitize(footerHtml);
     })
     .catch(err => console.error("Error loading components:", err));
 }

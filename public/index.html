@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; script-src-attr 'none'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; img-src 'self' data:; connect-src 'self' https://themeparkinfo-api.onrender.com https://api.themeparks.wiki; frame-src https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Adventure Scout</title>
@@ -169,6 +171,10 @@
   </main>
 
   <div id="footer-placeholder"></div>
+  <script src="assets/js/purify.min.js"></script>
+  <script src="assets/js/safeHtml.js"></script>
+  <script src="assets/js/alertSecurity.js"></script>
+
   <script src="assets/js/navigation.js"></script>
   <script src="../assets/js/apiBase.js"></script>
   <script src="assets/js/homepage.js"></script>

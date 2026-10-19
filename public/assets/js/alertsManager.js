@@ -1,6 +1,6 @@
 (function () {
   const baseUrl = window.__API_BASE__ || "";
-  const isNative = Boolean(window.Capacitor?.isNativePlatform?.());
+  const isNative = window.Capacitor?.getPlatform?.() === "android";
   function readLocalAlerts() {
     const alerts = JSON.parse(localStorage.getItem("waitTimeAlerts") || "[]");
     return Array.isArray(alerts) ? alerts : [];
@@ -40,22 +40,75 @@
     return typeof waitTime === "number" ? `${waitTime} min` : "N/A";
   }
 
-  function formatUpdated(lastUpdated) {
-    if (!lastUpdated) return "Not loaded yet";
-
-    const parsed = new Date(lastUpdated);
-    if (Number.isNaN(parsed.getTime())) return "Unknown";
-
-    return parsed.toLocaleString();
+  function formatAlertTimestamp(timestamp, park, missingLabel, invalidLabel) {
+    if (!timestamp) return missingLabel;
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return invalidLabel;
+    const zones = {
+      wdw: "America/New_York", usorlando: "America/New_York",
+      disneyland: "America/Los_Angeles", hollywood: "America/Los_Angeles",
+      ushollywood: "America/Los_Angeles"
+    };
+    const zone = zones[String(park || "").toLowerCase()];
+    if (!zone) return "Unknown park timezone";
+    return new Intl.DateTimeFormat("en-US", {
+      month: "numeric", day: "numeric", year: "numeric",
+      hour: "numeric", minute: "2-digit", hour12: true,
+      timeZone: zone, timeZoneName: "short"
+    }).format(date);
   }
 
-  function formatTriggered(triggeredAt) {
-    if (!triggeredAt) return "Not triggered yet";
+  function formatUpdated(lastUpdated, park) {
+    return formatAlertTimestamp(lastUpdated, park, "Not loaded yet", "Unknown");
+  }
 
-    const parsed = new Date(triggeredAt);
-    if (Number.isNaN(parsed.getTime())) return "Triggered recently";
+  function formatTriggered(triggeredAt, park) {
+    return formatAlertTimestamp(triggeredAt, park, "Not triggered yet", "Triggered recently");
+  }
 
-    return parsed.toLocaleString();
+  async function loadLocalAlertSnapshots() {
+    const parks = ["wdw", "disneyland", "usorlando", "hollywood"];
+    const saved = readLocalAlerts();
+    if (!saved.length) return [];
+    const normalize = park => String(park || "").toLowerCase() === "ushollywood" ? "hollywood" : String(park || "").toLowerCase();
+    const requested = saved.some(alert => !parks.includes(normalize(alert.park)))
+      ? parks : [...new Set(saved.map(alert => normalize(alert.park)))];
+    const results = await Promise.all(requested.map(async park => {
+      try {
+        const response = await fetch(baseUrl + "/api/" + park, { cache: "no-store", signal: AbortSignal.timeout(15000) });
+        if (!response.ok) throw new Error("Park data unavailable");
+        const payload = await response.json();
+        if (!Array.isArray(payload.data?.liveData)) throw new Error("Invalid park data");
+        return { park, rides: payload.data.liveData, lastUpdated: payload.lastUpdated || new Date().toISOString() };
+      } catch { return { park, rides: [], lastUpdated: null }; }
+    }));
+    // Re-read after the fetch so updates/deletions in another tab are respected.
+    const current = readLocalAlerts();
+    let changed = false;
+    const snapshots = current.map((alert, index) => {
+      const candidates = results.flatMap(result => {
+        if (alert.park && result.park !== normalize(alert.park)) return [];
+        return result.rides.filter(ride => ride.entityType === "ATTRACTION" &&
+          (alert.rideId ? ride.id === alert.rideId : ride.name === alert.name))
+          .map(ride => ({ ...result, ride }));
+      });
+      const match = candidates.length === 1 ? candidates[0] : null;
+      if (!match) return { ...alert, id: localAlertId(alert, index), status: "Live data unavailable", currentWait: null,
+        lastUpdated: null, isTriggered: Boolean(alert.triggeredAt) };
+      if (alert.park !== match.park || alert.rideId !== match.ride.id) {
+        alert.park = match.park; alert.rideId = match.ride.id; changed = true;
+      }
+      const status = match.ride.status || "Status unavailable";
+      const statusLower = status.toLowerCase();
+      const currentWait = match.ride.queue?.STANDBY?.waitTime ?? null;
+      const hit = (statusLower === "operating" && typeof currentWait === "number" && currentWait <= alert.waitTime) ||
+        ["down", "closed", "refurbishment"].includes(statusLower);
+      if (hit && !alert.triggeredAt) { alert.triggeredAt = new Date().toISOString(); changed = true; }
+      return { ...alert, id: localAlertId(alert, index), status, currentWait,
+        lastUpdated: match.lastUpdated, isTriggered: Boolean(alert.triggeredAt) };
+    });
+    if (changed) writeLocalAlerts(current);
+    return snapshots;
   }
 
   function scheduleRefresh(delayMs = 15000) {
@@ -76,9 +129,7 @@
 
     try {
       if (!isNative) {
-        const alerts = readLocalAlerts().map((alert, index) => ({
-          ...alert, id: localAlertId(alert, index), isTriggered: Boolean(alert.triggeredAt)
-        }));
+        const alerts = await loadLocalAlertSnapshots();
         renderAlerts(alerts);
         status.textContent = alerts.length
           ? alerts.length + " saved alert" + (alerts.length === 1 ? "" : "s")
@@ -91,7 +142,7 @@
 
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          response = await fetch(`${baseUrl}/api/alerts`, {
+          response = await window.AlertSecurity.request("/api/alerts", {
             cache: "no-store"
           });
           break;
@@ -122,11 +173,11 @@
       scheduleRefresh();
     } catch (error) {
       console.error("Alerts load failed:", error);
-      list.innerHTML = `
+      list.innerHTML = window.SafeHTML.sanitize(`
         <div class="alerts-empty">
           Could not load your alerts right now. Please try again.
         </div>
-      `;
+      `);
       status.textContent = error.message;
       scheduleRefresh(5000);
     }
@@ -136,20 +187,20 @@
     const list = document.getElementById("alertsList");
 
     if (!alerts.length) {
-      list.innerHTML = `
+      list.innerHTML = window.SafeHTML.sanitize(`
         <div class="alerts-empty">
           No wait time alerts have been saved yet.
         </div>
-      `;
+      `);
       return;
     }
 
-    list.innerHTML = alerts.map(alert => `
+    list.innerHTML = window.SafeHTML.sanitize(alerts.map(alert => `
       <article class="alert-manager-card ${alert.isTriggered ? "is-hit" : ""}" data-alert-id="${alert.id}">
         <div class="alert-manager-head">
           <div>
             <div class="alert-title-row">
-              <h3>${alert.name}</h3>
+              <h3>${window.SafeHTML.text(alert.name)}</h3>
               <span class="alert-chip ${alert.isTriggered ? "live" : "pending"}">
                 ${alert.isTriggered ? "Alert hit" : "Watching"}
               </span>
@@ -173,7 +224,7 @@
             </div>
             <div class="alert-stat">
               <span class="alert-stat-label">${alert.isTriggered ? "Alert hit" : "Last refresh"}</span>
-              <span class="alert-stat-value">${alert.isTriggered ? formatTriggered(alert.triggeredAt) : formatUpdated(alert.lastUpdated)}</span>
+              <span class="alert-stat-value">${alert.isTriggered ? formatTriggered(alert.triggeredAt, alert.park) : formatUpdated(alert.lastUpdated, alert.park)}</span>
             </div>
           </div>
 
@@ -193,12 +244,12 @@
           </div>
         </div>
       </article>
-    `).join("");
+    `).join(""));
   }
 
   async function updateAlert(alertId, waitTime) {
     if (!isNative) return changeLocalAlert(alertId, waitTime);
-    const response = await fetch(`${baseUrl}/api/alerts/${alertId}`, {
+    const response = await window.AlertSecurity.request(`/api/alerts/${encodeURIComponent(alertId)}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json"
@@ -213,7 +264,7 @@
 
   async function deleteAlert(alertId) {
     if (!isNative) return changeLocalAlert(alertId);
-    const response = await fetch(`${baseUrl}/api/alerts/${alertId}`, {
+    const response = await window.AlertSecurity.request(`/api/alerts/${encodeURIComponent(alertId)}`, {
       method: "DELETE"
     });
 
@@ -231,11 +282,14 @@
 
     text.textContent = `Delete the alert for ${alertName}? This cannot be undone.`;
     modal.classList.add("open");
+    modal.setAttribute("aria-hidden", "false");
   }
 
   function closeDeleteModal() {
     pendingDeleteAlert = null;
-    document.getElementById("deleteAlertModal")?.classList.remove("open");
+    const modal = document.getElementById("deleteAlertModal");
+    modal?.classList.remove("open");
+    modal?.setAttribute("aria-hidden", "true");
   }
 
   document.addEventListener("click", async event => {
@@ -255,7 +309,7 @@
 
       if (action === "update") {
         const waitTime = Number(input.value);
-        if (!Number.isFinite(waitTime) || waitTime < 0) {
+        if (!Number.isInteger(waitTime) || waitTime < 0 || waitTime > 300) {
           throw new Error("Enter a valid wait time.");
         }
 
@@ -309,6 +363,17 @@
     });
 
     if (!isNative) window.addEventListener("storage", () => loadAlerts());
+    document.getElementById("deleteAllAlertsBtn")?.addEventListener("click", async () => {
+      if (!window.confirm("Delete all your alerts and remove this device from push notifications?")) return;
+      try {
+        if (isNative) await window.AlertSecurity.deleteAll();
+        else localStorage.removeItem("waitTimeAlerts");
+        await loadAlerts();
+      } catch (error) { document.getElementById("alertsStatus").textContent = error.message; }
+    });
+    if (window.Capacitor?.getPlatform?.() === "ios") {
+      document.getElementById("alertPrivacyNote").textContent = "Alerts stay on this iPhone. They are checked while a park page is open; background push is not available yet.";
+    }
     loadAlerts();
   });
 })();

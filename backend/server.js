@@ -2,27 +2,49 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const fs = require("fs/promises");
-const { randomUUID } = require("crypto");
+const helmet = require("helmet");
+const { AlertStore } = require("./alert-store");
+const { registerAlertApi } = require("./alert-api");
+const { fetchParkData, useHostedParkData } = require("./park-data");
 require("dotenv").config();
 
 let firebaseAdmin = null;
 try {
-  firebaseAdmin = require("firebase-admin");
+  firebaseAdmin = {
+    ...require("firebase-admin/app"),
+    ...require("firebase-admin/messaging")
+  };
 } catch (error) {
   console.warn("firebase-admin is not installed. Push notifications are disabled.");
 }
 
 const app = express();
+// Configure only the known number of reverse-proxy hops; never trust all proxies.
+const proxyHops = Number(process.env.TRUST_PROXY_HOPS || 0);
+if (!Number.isInteger(proxyHops) || proxyHops < 0 || proxyHops > 3) throw new Error('Invalid TRUST_PROXY_HOPS');
+if (proxyHops) app.set('trust proxy', proxyHops);
 const PORT = process.env.PORT || 3000;
-const ALERTS_FILE = path.join(__dirname, "data", "alerts.json");
-const UNIVERSAL_WAIT_HISTORY_FILE = path.join(__dirname, "data", "universal-wait-history.json");
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
+const alertStore = new AlertStore(path.join(DATA_DIR, "secure-alerts.json"));
+const UNIVERSAL_WAIT_HISTORY_FILE = path.join(DATA_DIR, "universal-wait-history.json");
 const UNIVERSAL_CACHE_KEYS = new Set(["usorlando", "hollywood"]);
 const WAIT_HISTORY_RETENTION_DAYS = 14;
 const WAIT_HISTORY_BUCKET_MINUTES = 30;
 const WAIT_HISTORY_FORECAST_STEPS = [30, 60, 90, 120];
 
-app.use(cors());
-app.use(express.json());
+app.disable("x-powered-by");
+app.use(helmet({ contentSecurityPolicy: { directives: {
+  defaultSrc: ["'self'"], scriptSrc: ["'self'"], scriptSrcAttr: ["'none'"],
+  styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+  fontSrc: ["'self'", "https://cdnjs.cloudflare.com"], imgSrc: ["'self'", "data:"],
+  connectSrc: ["'self'", "https://api.themeparks.wiki", "https://themeparkinfo-api.onrender.com"],
+  frameSrc: ["https://www.google.com"], objectSrc: ["'none'"], baseUri: ["'self'"], upgradeInsecureRequests: null
+}}, crossOriginEmbedderPolicy: false }));
+const allowedOrigins = new Set(["capacitor://localhost", "http://localhost", "https://localhost",
+  "https://themeparkinfo-api.onrender.com", ...(process.env.ALLOWED_ORIGINS || "").split(",").map(s => s.trim()).filter(Boolean)]);
+app.use(cors({ origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)),
+  methods: ["GET", "POST", "PATCH", "DELETE"], allowedHeaders: ["Content-Type", "Authorization"] }));
+app.use(express.json({ limit: "12kb" }));
 
 const API_URLS = {
   disneyland: process.env.DISNEYLAND_API,
@@ -33,13 +55,15 @@ const API_URLS = {
 
 for (const park in API_URLS) {
   if (!API_URLS[park]) {
-    console.warn(`WARNING: Missing API URL for ${park}`);
+    console.warn(useHostedParkData(API_URLS[park])
+      ? `Local development: ${park} will use public park data from Render`
+      : `WARNING: Missing API URL for ${park}`);
   }
 }
 
 const cache = {};
 const pushState = {
-  alerts: [],
+  get alerts() { return alertStore.state.alerts; },
   messaging: null
 };
 const waitHistoryState = {
@@ -60,16 +84,6 @@ function normalizeParkKey(park) {
   return String(park || "").trim().toLowerCase();
 }
 
-async function ensureAlertsFile() {
-  await fs.mkdir(path.dirname(ALERTS_FILE), { recursive: true });
-
-  try {
-    await fs.access(ALERTS_FILE);
-  } catch (error) {
-    await fs.writeFile(ALERTS_FILE, "[]", "utf8");
-  }
-}
-
 async function ensureWaitHistoryFile() {
   await fs.mkdir(path.dirname(UNIVERSAL_WAIT_HISTORY_FILE), { recursive: true });
 
@@ -78,24 +92,6 @@ async function ensureWaitHistoryFile() {
   } catch (error) {
     await fs.writeFile(UNIVERSAL_WAIT_HISTORY_FILE, "{}", "utf8");
   }
-}
-
-async function loadAlerts() {
-  await ensureAlertsFile();
-
-  try {
-    const raw = await fs.readFile(ALERTS_FILE, "utf8");
-    const parsed = JSON.parse(raw);
-    pushState.alerts = Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error("Failed to load alerts:", error.message);
-    pushState.alerts = [];
-  }
-}
-
-async function persistAlerts() {
-  await ensureAlertsFile();
-  await fs.writeFile(ALERTS_FILE, JSON.stringify(pushState.alerts, null, 2), "utf8");
 }
 
 async function loadWaitHistory() {
@@ -277,7 +273,6 @@ function parseServiceAccount(rawValue) {
 
 function initializeFirebaseMessaging() {
   if (!firebaseAdmin) return null;
-  if (firebaseAdmin.apps.length) return firebaseAdmin.messaging();
 
   const serviceAccount = parseServiceAccount(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
 
@@ -287,11 +282,11 @@ function initializeFirebaseMessaging() {
   }
 
   try {
-    firebaseAdmin.initializeApp({
-      credential: firebaseAdmin.credential.cert(serviceAccount)
+    const firebaseApp = firebaseAdmin.getApps().find(app => app.name === "[DEFAULT]") || firebaseAdmin.initializeApp({
+      credential: firebaseAdmin.cert(serviceAccount)
     });
 
-    return firebaseAdmin.messaging();
+    return firebaseAdmin.getMessaging(firebaseApp);
   } catch (error) {
     console.error("Firebase initialization failed:", error.message);
     return null;
@@ -322,7 +317,7 @@ function buildAggregatedMessage(alerts) {
 
 function evaluateAlert(alert) {
   const cachedData = cache[alert.park]?.data;
-  const match = cachedData?.liveData?.find(item => item.name === alert.name);
+  const match = cachedData?.liveData?.find(item => item.id === alert.rideId);
 
   if (!match) {
     return {
@@ -351,7 +346,8 @@ function findTriggeredAlertsForPark(park) {
   const cachedData = cache[park]?.data;
   if (!cachedData?.liveData) return [];
 
-  const parkAlerts = pushState.alerts.filter(alert => alert.park === park);
+  const activeOwners = new Set(alertStore.state.devices.filter(d => d.expiresAt > Date.now()).map(d => d.ownerHash));
+  const parkAlerts = pushState.alerts.filter(alert => alert.park === park && activeOwners.has(alert.ownerHash) && Date.parse(alert.updatedAt || alert.createdAt) > Date.now() - 30 * 86400000);
   if (!parkAlerts.length) return [];
 
   const triggered = [];
@@ -374,7 +370,9 @@ function buildAlertSnapshot(alert) {
   const evaluatedAlert = evaluateAlert(alert);
 
   return {
-    ...alert,
+    id: alert.id, park: alert.park, rideId: alert.rideId, name: alert.name,
+    waitTime: alert.waitTime, createdAt: alert.createdAt, updatedAt: alert.updatedAt,
+    triggeredAt: alert.triggeredAt,
     status: evaluatedAlert.status,
     currentWait: evaluatedAlert.currentWait,
     isTriggered: evaluatedAlert.isTriggered,
@@ -382,21 +380,13 @@ function buildAlertSnapshot(alert) {
   };
 }
 
-function reconcileTriggeredStateForPark(park) {
-  let changed = false;
-
-  pushState.alerts.forEach(alert => {
-    if (alert.park !== park) return;
-
-    const evaluatedAlert = evaluateAlert(alert);
-
-    if (!evaluatedAlert.isTriggered && alert.triggeredAt) {
-      delete alert.triggeredAt;
-      changed = true;
-    }
+async function reconcileTriggeredStateForPark(park) {
+  if (!pushState.alerts.some(a => a.park === park && a.triggeredAt && !evaluateAlert(a).isTriggered)) return;
+  await alertStore.transaction(state => {
+    state.alerts.forEach(alert => {
+      if (alert.park === park && !evaluateAlert(alert).isTriggered) delete alert.triggeredAt;
+    });
   });
-
-  return changed;
 }
 
 async function sendTriggeredNotifications(triggeredAlerts) {
@@ -441,7 +431,7 @@ async function sendTriggeredNotifications(triggeredAlerts) {
           deliveredAlertIds.add(alert.id);
         });
       } catch (error) {
-        console.error(`Push send failed for token ${deviceToken}:`, error.message);
+        console.error("Push delivery failed:", error.code || "unknown");
 
         if (
           error.code === "messaging/registration-token-not-registered" ||
@@ -455,25 +445,14 @@ async function sendTriggeredNotifications(triggeredAlerts) {
 
   if (!deliveredAlertIds.size && !invalidTokens.size) return;
 
-  let changed = false;
-
-  pushState.alerts = pushState.alerts.filter(alert => {
-    if (invalidTokens.has(alert.deviceToken)) {
-      changed = true;
-      return false;
-    }
-
-    if (deliveredAlertIds.has(alert.id)) {
-      alert.triggeredAt = new Date().toISOString();
-      changed = true;
-    }
-
-    return true;
+  await alertStore.transaction(state => {
+    state.devices = state.devices.filter(d => !invalidTokens.has(d.token));
+    state.alerts = state.alerts.filter(alert => {
+      if (invalidTokens.has(alert.deviceToken)) return false;
+      if (deliveredAlertIds.has(alert.id)) alert.triggeredAt = new Date().toISOString();
+      return true;
+    });
   });
-
-  if (changed) {
-    await persistAlerts();
-  }
 }
 
 async function processTriggeredAlertsForPark(park) {
@@ -494,30 +473,23 @@ async function updateCache() {
 
     for (const park in API_URLS) {
       try {
-        if (!API_URLS[park]) continue;
+        const result = await fetchParkData(park, API_URLS[park]);
+        if (!result) continue;
+        const { data, hosted } = result;
 
-        const response = await fetch(API_URLS[park]);
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        if (UNIVERSAL_CACHE_KEYS.has(park)) {
+        if (!hosted && UNIVERSAL_CACHE_KEYS.has(park)) {
           shouldPersistWaitHistory = updateUniversalWaitHistory(data, new Date()) || shouldPersistWaitHistory;
           attachUniversalForecasts(data, new Date());
         }
 
         cache[park].data = data;
-        cache[park].lastUpdated = new Date();
+        const hostedTimestamp = result.lastUpdated && new Date(result.lastUpdated);
+        cache[park].lastUpdated = hostedTimestamp && !Number.isNaN(hostedTimestamp.getTime()) ? hostedTimestamp : new Date();
         cache[park].error = null;
 
         console.log(`${park} updated at ${cache[park].lastUpdated.toISOString()}`);
         await processTriggeredAlertsForPark(park);
-        if (reconcileTriggeredStateForPark(park)) {
-          await persistAlerts();
-        }
+        await reconcileTriggeredStateForPark(park);
       } catch (error) {
         console.error(`Error updating ${park}:`, error.message);
         cache[park].error = error.message;
@@ -532,130 +504,14 @@ async function updateCache() {
   }
 }
 
-app.post("/api/alerts", async (req, res) => {
-  const park = normalizeParkKey(req.body.park);
-  const name = String(req.body.name || "").trim();
-  const deviceToken = String(req.body.deviceToken || "").trim();
-  const waitTime = Number(req.body.waitTime);
-
-  if (!API_URLS[park]) {
-    return res.status(400).json({
-      error: true,
-      message: "Invalid park"
-    });
-  }
-
-  if (!name || !deviceToken || !Number.isFinite(waitTime) || waitTime < 0) {
-    return res.status(400).json({
-      error: true,
-      message: "Missing or invalid alert fields"
-    });
-  }
-
-  const existingAlert = pushState.alerts.find(alert =>
-    alert.deviceToken === deviceToken &&
-    alert.park === park &&
-    alert.name === name
-  );
-
-  if (existingAlert) {
-    existingAlert.waitTime = waitTime;
-    existingAlert.updatedAt = new Date().toISOString();
-    delete existingAlert.triggeredAt;
-  } else {
-    pushState.alerts.push({
-      id: randomUUID(),
-      park,
-      name,
-      waitTime,
-      deviceToken,
-      createdAt: new Date().toISOString()
-    });
-  }
-
-  await persistAlerts();
-
-  res.status(201).json({
-    success: true,
-    message: "Alert saved for server-side push notifications"
-  });
-});
-
-app.get("/api/alerts", (req, res) => {
-  const alerts = pushState.alerts
-    .map(buildAlertSnapshot)
-    .sort((a, b) => {
-      if (a.isTriggered !== b.isTriggered) {
-        return a.isTriggered ? -1 : 1;
-      }
-
-      if (a.triggeredAt && b.triggeredAt) {
-        return new Date(b.triggeredAt).getTime() - new Date(a.triggeredAt).getTime();
-      }
-
-      return a.name.localeCompare(b.name);
-    });
-
-  res.json({
-    data: alerts
-  });
-});
-
-app.patch("/api/alerts/:id", async (req, res) => {
-  const alertId = String(req.params.id || "").trim();
-  const waitTime = Number(req.body.waitTime);
-
-  if (!alertId || !Number.isFinite(waitTime) || waitTime < 0) {
-    return res.status(400).json({
-      error: true,
-      message: "Missing or invalid alert update"
-    });
-  }
-
-  const alert = pushState.alerts.find(entry => entry.id === alertId);
-  if (!alert) {
-    return res.status(404).json({
-      error: true,
-      message: "Alert not found"
-    });
-  }
-
-  alert.waitTime = waitTime;
-  alert.updatedAt = new Date().toISOString();
-  await persistAlerts();
-
-  return res.json({
-    success: true,
-    data: buildAlertSnapshot(alert)
-  });
-});
-
-app.delete("/api/alerts/:id", async (req, res) => {
-  const alertId = String(req.params.id || "").trim();
-  const previousCount = pushState.alerts.length;
-
-  pushState.alerts = pushState.alerts.filter(entry => entry.id !== alertId);
-
-  if (pushState.alerts.length === previousCount) {
-    return res.status(404).json({
-      error: true,
-      message: "Alert not found"
-    });
-  }
-
-  await persistAlerts();
-
-  return res.json({
-    success: true
-  });
-});
+registerAlertApi(app, { store: alertStore, cache, snapshot: buildAlertSnapshot, messaging: () => pushState.messaging });
 
 app.get("/api/:park", (req, res) => {
   const park = normalizeParkKey(req.params.park);
 
   console.log(`API request for: ${park}`);
 
-  if (!cache[park]) {
+  if (!Object.hasOwn(cache, park)) {
     return res.status(404).json({
       error: true,
       message: "Park not found"
@@ -689,6 +545,8 @@ app.get("/test", (req, res) => {
   res.send("SERVER IS WORKING");
 });
 
+app.use("/api", (req, res) => res.status(404).json({ error: true, message: "Not found" }));
+
 app.use(express.static(path.join(__dirname, "../public")));
 
 app.use((req, res) => {
@@ -697,7 +555,11 @@ app.use((req, res) => {
 
 async function startServer() {
   pushState.messaging = initializeFirebaseMessaging();
-  await loadAlerts();
+  await alertStore.load();
+  // Legacy records have no owner credential and cannot be safely migrated.
+  await fs.unlink(path.join(DATA_DIR, 'alerts.json')).catch(error => {
+    if (error.code !== 'ENOENT') throw error;
+  });
   await loadWaitHistory();
   await updateCache();
 
@@ -707,12 +569,23 @@ async function startServer() {
     });
   }, 30000);
 
+  setInterval(() => {
+    alertStore.transaction(() => {}).catch(() => console.error('Private alert retention cleanup failed'));
+  }, 60 * 60 * 1000);
+
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
 }
 
-startServer().catch(error => {
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
+  const status = error.status || 500;
+  console.error("Request failed:", status);
+  res.status(status).json({ error: true, message: error.publicMessage || (status === 400 ? "Invalid request" : status === 413 ? "Request too large" : "Request could not be completed") });
+});
+module.exports = { app, alertStore, cache, buildAlertSnapshot, initializeFirebaseMessaging };
+if (require.main === module) startServer().catch(error => {
   console.error("Server failed to start:", error);
   process.exit(1);
 });

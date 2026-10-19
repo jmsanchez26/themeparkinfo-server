@@ -32,7 +32,7 @@ const NORMALIZED_RIDE_HEIGHTS = Object.entries(RIDE_HEIGHTS).map(([key, value]) 
  * LOG SAVED ALERTS
  *************************/
 function logSavedAlerts(context) {
-  console.log(`Saved Alerts (${context}):`, waitTimeAlerts);
+  // Alert preferences are private; do not log them.
 }
 
 function buildFavoriteRideKey(park, item) {
@@ -64,7 +64,7 @@ function normalizeRideMetaKey(value) {
 
 function formatRideHeight(park, item) {
   const idKey = item.id ? `${park}::${item.id}` : null;
-  const nameKey = `${park}::${item.name}`;
+  const nameKey = `${park}::${window.SafeHTML.text(item.name)}`;
   const normalizedIdKey = idKey ? normalizeRideMetaKey(idKey) : null;
   const normalizedNameKey = normalizeRideMetaKey(nameKey);
   const exactMatch =
@@ -108,8 +108,20 @@ function formatRideInsight(item) {
 
 function buildRideMapUrl(park, item) {
   const parkLabel = RIDE_PARK_LABELS[park] || "Theme Park";
-  const query = encodeURIComponent(`${item.name}, ${parkLabel}`);
+  const query = encodeURIComponent(`${window.SafeHTML.text(item.name)}, ${parkLabel}`);
   return `https://www.google.com/maps?q=${query}&output=embed`;
+}
+
+function formatParkLocalTime(isoTime) {
+  if (!isoTime) return null;
+  const date = new Date(isoTime);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric", minute: "2-digit", hour12: true,
+    timeZone: timeZone, timeZoneName: "short"
+  }).formatToParts(date);
+  const part = type => parts.find(item => item.type === type)?.value || "";
+  return part("hour") + ":" + part("minute") + " " + part("dayPeriod") + " " + part("timeZoneName");
 }
 
 function getRideLLDetails(item) {
@@ -133,15 +145,15 @@ function openRideDetailsModal(park, item) {
   const showInsight = item.rideNow !== null || item.waitDopBool === true || (item.avgWaitTime !== null && typeof item.avgWaitTime === "number");
   const llDetails = getRideLLDetails(item);
 
-  modal.innerHTML = `
-    <div class="rideDetailsModalInner" role="dialog" aria-modal="true" aria-label="${item.name} details">
+  modal.innerHTML = window.SafeHTML.sanitize(`
+    <div class="rideDetailsModalInner" role="dialog" aria-modal="true" aria-label="${window.SafeHTML.text(item.name)} details">
       <button class="rideDetailsCloseBtn" type="button" aria-label="Close ride details">
         <i class="fa fa-times"></i>
       </button>
 
       <div class="rideDetailsHero">
         <span class="rideDetailsPark">${parkLabel}</span>
-        <h2>${item.name}</h2>
+        <h2>${window.SafeHTML.text(item.name)}</h2>
         <span class="saved-alert-chip ${String(item.status || "").toLowerCase() === "operating" ? "watching" : "hit"}">
           ${item.status || "Unknown"}
         </span>
@@ -179,12 +191,12 @@ function openRideDetailsModal(park, item) {
             loading="lazy"
             referrerpolicy="no-referrer-when-downgrade"
             allowfullscreen
-            title="${item.name} map">
+            title="${window.SafeHTML.text(item.name)} map">
           </iframe>
         </div>
       </div>
     </div>
-  `;
+  `);
 
   modal.style.display = "flex";
   modal.setAttribute("aria-hidden", "false");
@@ -283,7 +295,7 @@ async function getParkData() {
         const paidLLAvailable = item.queue?.PAID_RETURN_TIME?.state
         const paidReturnStart = item.queue?.PAID_RETURN_TIME?.returnStart;
         const regularReturnStart = item.queue?.RETURN_TIME?.returnStart;
-        const hasShowTimes = item.showtimes || []; 
+        const hasShowTimes = item.showtimes?.length ? item.showtimes : (item.operatingHours || []);
         let status = item.status;
         let upcomingShowTimes = [];
         let goodTimeToRide = null;
@@ -294,17 +306,7 @@ async function getParkData() {
         let llLabel = null;
         let nextShowTime = null;
 
-        const formatLLTime = (isoTime) => {
-          if (!isoTime) return null;
-
-          let [hours, minutes] = isoTime.split("T")[1].split(":");
-          hours = Number(hours);
-
-          const suffix = hours >= 12 ? "PM" : "AM";
-          hours = (hours % 12) || 12;
-
-          return `${hours}:${minutes} ${suffix}`;
-        };
+        const formatLLTime = formatParkLocalTime;
 
         if (regularReturnStart && (llAvailable === "AVAILABLE" || paidLLAvailable !== "AVAILABLE")) {
           NextLLregularTime = formatLLTime(regularReturnStart);
@@ -317,7 +319,7 @@ async function getParkData() {
           llLabel = "LL";
         }
 
-        if (type === "show" && hasShowTimes.length > 0) {
+        if (type !== "attraction" && hasShowTimes.length > 0) {
           const now = new Date();
 
           const normalizedShowTimes = hasShowTimes
@@ -330,7 +332,7 @@ async function getParkData() {
 
           const activeShow = normalizedShowTimes.find(show => {
             const endTime = show.end && !Number.isNaN(show.end.getTime()) ? show.end : null;
-            return endTime ? show.start <= now && now < endTime : show.start <= now;
+            return endTime && show.start <= now && now < endTime;
           });
 
           upcomingShowTimes = normalizedShowTimes.filter(show => show.start > now);
@@ -473,7 +475,7 @@ if (!futureForecast.length) {
 function renderCards(park, type, selector) {
   const container = document.querySelector(selector);
   if (!container) return;
-  container.innerHTML = "";
+  container.innerHTML = window.SafeHTML.sanitize("");
   const items = [...parks[park][type]];
   const wrapper = container.closest(".card-wrapper");
   if (type === "rides") {
@@ -505,11 +507,11 @@ function renderCards(park, type, selector) {
       : '<i class="fa fa-hand-paper-o"></i>';
     }
 
-    card.innerHTML = type === "rides"
+    card.innerHTML = window.SafeHTML.sanitize(type === "rides"
       ? `
         <div class="saved-alert-head wait-card-head">
           <div class="saved-alert-title-row wait-card-title-row">
-            <h3>${waitForecastIcon} ${item.name}</h3>
+            <h3>${waitForecastIcon} ${window.SafeHTML.text(item.name)}</h3>
             <button class="favoriteRideBtn ${isFavorite ? "active" : ""}" type="button" aria-label="${isFavorite ? "Remove from favorites" : "Add to favorites"}">
               <i class="fa fa-star"></i>
             </button>
@@ -574,7 +576,7 @@ function renderCards(park, type, selector) {
       `
       : `
         <div class="card-title">
-          <h3>${waitForecastIcon} ${item.name}</h3>
+          <h3>${waitForecastIcon} ${window.SafeHTML.text(item.name)}</h3>
           ${type === "rides" ? `
             <button class="favoriteRideBtn ${isFavorite ? "active" : ""}" type="button" aria-label="${isFavorite ? "Remove from favorites" : "Add to favorites"}">
               <i class="fa fa-star"></i>
@@ -612,7 +614,7 @@ function renderCards(park, type, selector) {
             }
           </div>
         </div>
-      `;
+      `);
 
     if (statusLower === "operating" && hasWait) {
       card.querySelector(".waitTimeRemBtn").addEventListener("click", (event) => {

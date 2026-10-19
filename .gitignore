@@ -10,3 +10,15 @@ local.properties
 **/local.properties
 *.iml
 themeparkinfo-mobile/android/app/google-services.json
+.env
+.env.*
+!.env.example
+*.p8
+*.p12
+*.pfx
+*.jks
+*.keystore
+*service-account*.json
+backend/data/secure-alerts.json
+backend/data/secure-alerts.json.*.tmp
+backend/data/alerts.json
