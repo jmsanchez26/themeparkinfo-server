@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase/app';
+import { signInWithGoogle as signInWithAndroidGoogle } from './google-signin.cjs';
 import { getAuth, connectAuthEmulator, onAuthStateChanged, GoogleAuthProvider, signInWithPopup,
   signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification,
   sendPasswordResetEmail, signInAnonymously, signOut, reload, browserLocalPersistence, setPersistence } from 'firebase/auth';
@@ -61,7 +62,7 @@ import { getAuth, connectAuthEmulator, onAuthStateChanged, GoogleAuthProvider, s
     ready, get user() { return currentUser; }, get emulator() { return Boolean(config?.emulator); },
     async google() {
       await ready;
-      if (android) { await native.signInWithGoogle(); currentUser = (await native.getCurrentUser()).user; }
+      if (android) { await signInWithAndroidGoogle(native); currentUser = (await native.getCurrentUser()).user; }
       else { currentUser = (await signInWithPopup(auth, new GoogleAuthProvider())).user; }
       await validate(); location.replace('/index.html');
     },
