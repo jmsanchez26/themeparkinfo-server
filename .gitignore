@@ -22,3 +22,7 @@ themeparkinfo-mobile/android/app/google-services.json
 backend/data/secure-alerts.json
 backend/data/secure-alerts.json.*.tmp
 backend/data/alerts.json
+backend/data/local-auth-test/
+firebase-debug.log
+*-debug.log
+.firebase/

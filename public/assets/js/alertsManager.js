@@ -68,6 +68,7 @@
   }
 
   async function loadLocalAlertSnapshots() {
+    if (window.BrowserAlerts) await window.BrowserAlerts.check();
     const parks = ["wdw", "disneyland", "usorlando", "hollywood"];
     const saved = readLocalAlerts();
     if (!saved.length) return [];
@@ -100,11 +101,11 @@
         alert.park = match.park; alert.rideId = match.ride.id; changed = true;
       }
       const evaluated = window.AlertRules.evaluate(alert, match.ride);
-      if (evaluated.isTriggered && (alert.mode === "good_time" || !alert.triggeredAt)) {
+      if (!window.BrowserAlerts && evaluated.isTriggered && (alert.mode === "good_time" || !alert.triggeredAt)) {
         alert.triggeredAt = new Date().toISOString(); changed = true;
       }
       const observed = window.AlertRules.observation(match.ride);
-      if (alert.lastObservedWait !== observed) { alert.lastObservedWait = observed; changed = true; }
+      if (!window.BrowserAlerts && alert.lastObservedWait !== observed) { alert.lastObservedWait = observed; changed = true; }
       return { ...alert, ...evaluated, id: localAlertId(alert, index), lastUpdated: match.lastUpdated,
         isTriggered: alert.mode === "good_time" ? evaluated.isTriggered : Boolean(alert.triggeredAt) };
     });

@@ -2,16 +2,22 @@
   const key = 'privateAlertCredentialV1';
   const android = window.Capacitor?.isNativePlatform?.() && window.Capacitor?.getPlatform?.() === 'android';
   let androidCredential;
+  let credentialAccount;
   function secureStorage() {
     const plugin = window.Capacitor?.Plugins?.AlertCredential;
     if (!plugin) throw new Error('Android secure alert storage is unavailable. Please update the app.');
     return plugin;
   }
   async function credential() {
+    const accountId = window.AppAuth?.user?.uid;
+    const accountKey = accountId ? key + ':' + accountId : key;
+    if (credentialAccount !== accountId) { androidCredential = null; credentialAccount = accountId; }
     if (android) {
       if (!androidCredential) {
         androidCredential = (async () => {
-          const result = await secureStorage().getOrCreate({ legacyCredential: localStorage.getItem(key) });
+          const legacyOwner = localStorage.getItem('scout-legacy-owner');
+          const legacyCredential = !accountId || !legacyOwner || legacyOwner === accountId ? localStorage.getItem(key) : null;
+          const result = await secureStorage().getOrCreate({ legacyCredential, ...(accountId ? { accountId } : {}) });
           if (!/^[a-f0-9]{64}$/.test(result?.credential || '')) throw new Error('Invalid secure alert credential');
           // Remove plaintext only after native storage has persisted the same identity.
           localStorage.removeItem(key);
@@ -20,10 +26,15 @@
       }
       return androidCredential;
     }
-    let value = localStorage.getItem(key);
+    let value = localStorage.getItem(accountKey);
+    if (accountId && !value && localStorage.getItem('scout-legacy-owner') === accountId) {
+      value = localStorage.getItem(key);
+      if (/^[a-f0-9]{64}$/.test(value || '')) localStorage.setItem(accountKey, value);
+      localStorage.removeItem(key);
+    }
     if (!/^[a-f0-9]{64}$/.test(value || '')) {
       value = Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('');
-      localStorage.setItem(key, value);
+      localStorage.setItem(accountKey, value);
     }
     return value;
   }
@@ -81,12 +92,14 @@
   window.AlertSecurity = { request, verifyDevice, async deleteAll() {
     await request('/api/alert-devices', { method: 'DELETE' });
     if (android) {
-      await secureStorage().clear();
+      const accountId = window.AppAuth?.user?.uid;
+      await secureStorage().clear(accountId ? { accountId } : {});
       androidCredential = null;
     }
     await window.Capacitor?.Plugins?.PushNotifications?.unregister?.();
     localStorage.removeItem('pushDeviceToken');
     localStorage.removeItem('waitTimeAlerts');
     localStorage.removeItem(key);
+    if (window.AppAuth?.user?.uid) localStorage.removeItem(key + ':' + window.AppAuth.user.uid);
   } };
 })();

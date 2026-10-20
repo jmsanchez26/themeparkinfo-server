@@ -301,6 +301,7 @@ function openSetAlertModal(item) {
 
       if (typeof markRideAlertSet === "function") markRideAlertSet(item);
       modal.style.display = "none";
+      window.dispatchEvent(new Event('local-alerts-changed'));
     } catch (error) {
       console.error("Failed to save alert:", error);
       errorMessage.textContent = error?.message || "Could not save alert. Please try again.";
@@ -317,6 +318,10 @@ function openSetAlertModal(item) {
  * CHECK ALERTS
  *************************/
 function checkAlerts(park) {
+  if (window.BrowserAlerts) {
+    window.BrowserAlerts.check().catch(error => console.warn('Browser alert check failed:', error.message));
+    return;
+  }
   if (canUseServerSidePush()) return;
   if (!waitTimeAlerts.length) return;
 

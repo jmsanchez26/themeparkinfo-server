@@ -15,6 +15,11 @@ function loadSiteComponents() {
     .then(([headerHtml, footerHtml]) => {
       if (headerPlaceholder) headerPlaceholder.innerHTML = window.SafeHTML.sanitize(headerHtml);
       if (footerPlaceholder) footerPlaceholder.innerHTML = window.SafeHTML.sanitize(footerHtml);
+      document.getElementById('account-signout')?.addEventListener('click', async event => {
+        event.currentTarget.disabled = true;
+        try { await window.AppAuth.logout(); }
+        catch { event.currentTarget.disabled = false; window.alert('Could not sign out. Check your connection and try again.'); }
+      });
     })
     .catch(err => console.error("Error loading components:", err));
 }

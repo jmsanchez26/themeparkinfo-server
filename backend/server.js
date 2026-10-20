@@ -9,6 +9,8 @@ const { fetchParkData, useHostedParkData } = require("./park-data");
 const alertRules = require("../public/assets/js/alertRules");
 const { createPublicApiLimiter } = require("./api-limits");
 require("dotenv").config();
+const { createAccountAuth } = require('./account-auth');
+const accountAuth = createAccountAuth();
 
 let firebaseAdmin = null;
 try {
@@ -36,17 +38,18 @@ const WAIT_HISTORY_FORECAST_STEPS = [30, 60, 90, 120];
 
 app.disable("x-powered-by");
 app.use(helmet({ contentSecurityPolicy: { directives: {
-  defaultSrc: ["'self'"], scriptSrc: ["'self'"], scriptSrcAttr: ["'none'"],
+  defaultSrc: ["'self'"], scriptSrc: ["'self'", "https://apis.google.com"], scriptSrcAttr: ["'none'"],
   styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
   fontSrc: ["'self'", "https://cdnjs.cloudflare.com"], imgSrc: ["'self'", "data:"],
-  connectSrc: ["'self'", "https://api.themeparks.wiki", "https://themeparkinfo-api.onrender.com"],
-  frameSrc: ["https://www.google.com"], objectSrc: ["'none'"], baseUri: ["'self'"], upgradeInsecureRequests: null
-}}, crossOriginEmbedderPolicy: false }));
+  connectSrc: ["'self'", "https://api.themeparks.wiki", "https://themeparkinfo-api.onrender.com", "https://identitytoolkit.googleapis.com", "https://securetoken.googleapis.com", "https://www.googleapis.com", ...(accountAuth.config.emulator ? ['http://127.0.0.1:9099'] : [])],
+  frameSrc: ["https://www.google.com", "https://themeparkinfo-ba1e8.firebaseapp.com"], objectSrc: ["'none'"], baseUri: ["'self'"], upgradeInsecureRequests: null
+}}, crossOriginEmbedderPolicy: false, crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' } }));
 const allowedOrigins = new Set(["capacitor://localhost", "http://localhost", "https://localhost",
   "https://themeparkinfo-api.onrender.com", ...(process.env.ALLOWED_ORIGINS || "").split(",").map(s => s.trim()).filter(Boolean)]);
 app.use(cors({ origin: (origin, callback) => callback(null, !origin || allowedOrigins.has(origin)),
-  methods: ["GET", "POST", "PATCH", "DELETE"], allowedHeaders: ["Content-Type", "Authorization"] }));
+  methods: ["GET", "POST", "PATCH", "DELETE"], allowedHeaders: ["Content-Type", "Authorization", "X-Firebase-ID-Token"] }));
 app.use(express.json({ limit: "12kb" }));
+accountAuth.register(app);
 
 const API_URLS = {
   disneyland: process.env.DISNEYLAND_API,
@@ -388,6 +391,7 @@ async function sendTriggeredNotifications(triggeredAlerts) {
   const invalidTokens = new Set();
 
   triggeredAlerts.forEach(alert => {
+    if (!alert.deviceToken) return;
     const existingAlerts = alertsByToken.get(alert.deviceToken) || [];
     existingAlerts.push(alert);
     alertsByToken.set(alert.deviceToken, existingAlerts);
@@ -504,7 +508,7 @@ async function updateCache() {
 
 registerAlertApi(app, { store: alertStore, cache, snapshot: buildAlertSnapshot, messaging: () => pushState.messaging });
 
-app.get("/api/:park", createPublicApiLimiter(), (req, res) => {
+function parkResponse(req, res) {
   const park = normalizeParkKey(req.params.park);
 
   console.log(`API request for: ${park}`);
@@ -537,7 +541,11 @@ app.get("/api/:park", createPublicApiLimiter(), (req, res) => {
     lastUpdated: cache[park].lastUpdated,
     data: cache[park].data
   });
-});
+}
+app.get('/api/:park', createPublicApiLimiter(), parkResponse);
+// Only aggregated, public park information is available here; never user data.
+// This keeps keyless local emulator testing independent of production accounts.
+app.get('/park-feed/:park', createPublicApiLimiter(), parkResponse);
 
 app.get("/test", (req, res) => {
   res.send("SERVER IS WORKING");
@@ -571,7 +579,7 @@ async function startServer() {
     alertStore.transaction(() => {}).catch(() => console.error('Private alert retention cleanup failed'));
   }, 60 * 60 * 1000);
 
-  app.listen(PORT, () => {
+  app.listen(PORT, accountAuth.config.emulator ? '127.0.0.1' : '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
   });
 }

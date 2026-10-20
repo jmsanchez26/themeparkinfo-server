@@ -10,9 +10,13 @@ async function fetchParkData(park, upstreamUrl, { environment = process.env, fet
   const hosted = useHostedParkData(upstreamUrl, environment);
   if (!upstreamUrl && !hosted) return null;
   // Fixed host and allowlisted public paths: never proxy private alerts or caller-selected URLs.
-  const response = await fetcher(hosted ? `${HOSTED_API}/api/${park}` : upstreamUrl, {
+  let response = await fetcher(hosted ? `${HOSTED_API}/park-feed/${park}` : upstreamUrl, {
     signal: AbortSignal.timeout(15000)
   });
+  // Compatible with the currently deployed pre-auth backend during rollout.
+  if (hosted && (response.status === 404 || (response.ok && response.headers?.get('content-type')?.includes('text/html')))) {
+    response = await fetcher(`${HOSTED_API}/api/${park}`, { signal: AbortSignal.timeout(15000) });
+  }
   if (!response.ok) throw new Error(`Park data unavailable (HTTP ${response.status})`);
   const payload = await response.json();
   const data = hosted ? payload.data : payload;

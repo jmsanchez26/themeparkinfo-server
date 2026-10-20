@@ -4,7 +4,7 @@ const { RETENTION_MS } = require('./alert-store');
 const alertRules = require('../public/assets/js/alertRules');
 
 const hash = value => createHash('sha256').update(value).digest('hex');
-const asyncRoute = fn => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
+const asyncRoute = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const fail = (status, message) => Object.assign(new Error(message), { status, publicMessage: message });
 const validWait = value => typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 300;
 const validToken = value => typeof value === 'string' && /^[A-Za-z0-9_:.-]{20,4096}$/.test(value);
@@ -23,13 +23,23 @@ function registerAlertApi(app, { store, cache, snapshot, messaging, verification
     standardHeaders: 'draft-8', legacyHeaders: false
   });
   const mutationLimiter = rateLimit({ windowMs: 60000, limit: 30, keyGenerator: req => req.ownerHash, standardHeaders: 'draft-8', legacyHeaders: false });
-  function identity(req, res, next) {
+  const identity = asyncRoute(async (req, res, next) => {
     res.set('Cache-Control', 'no-store');
     const match = /^Bearer ([a-f0-9]{64})$/.exec(req.get('Authorization') || '');
     if (!match) return res.status(401).json({ error: true, message: 'This app version needs a private alert identity. Update the app.' });
     req.ownerHash = hash(match[1]);
+    if (req.account) {
+      // Existing device credentials prove ownership during the one-time account migration.
+      const device = store.state.devices.find(d => d.ownerHash === req.ownerHash);
+      if (device?.accountUid && device.accountUid !== req.account.uid) throw fail(403, 'These device alerts belong to another account.');
+      if (device && !device.accountUid) await store.transaction(state => {
+        const current = state.devices.find(d => d.ownerHash === req.ownerHash);
+        if (current?.accountUid && current.accountUid !== req.account.uid) throw fail(403, 'These device alerts belong to another account.');
+        if (current) current.accountUid = req.account.uid;
+      });
+    }
     next();
-  }
+  });
   app.use(['/api/alerts', '/api/alert-devices'], (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); }, limiter, identity);
   app.use(['/api/alerts', '/api/alert-devices'], (req, res, next) => {
     if (['POST', 'PATCH', 'DELETE'].includes(req.method) && !req.path.endsWith('/challenge')) return mutationLimiter(req, res, next);
@@ -57,7 +67,7 @@ function registerAlertApi(app, { store, cache, snapshot, messaging, verification
     }
     const challengeId = randomUUID();
     const proof = randomBytes(32).toString('hex');
-    pending.set(challengeId, { ownerHash: req.ownerHash, token, proofHash: hash(proof), lane, expiresAt: now + 120000 });
+    pending.set(challengeId, { ownerHash: req.ownerHash, accountUid: req.account?.uid, token, proofHash: hash(proof), lane, expiresAt: now + 120000 });
     activeSends[lane]++;
     try {
       // The proof is delivered ONLY through push, never returned to the HTTP caller.
@@ -74,7 +84,7 @@ function registerAlertApi(app, { store, cache, snapshot, messaging, verification
   app.post('/api/alert-devices/verify', asyncRoute(async (req, res) => {
     const { challengeId, proof } = req.body || {};
     const entry = pending.get(challengeId);
-    if (!entry || entry.expiresAt <= Date.now() || entry.ownerHash !== req.ownerHash ||
+    if (!entry || entry.expiresAt <= Date.now() || entry.ownerHash !== req.ownerHash || entry.accountUid !== req.account?.uid ||
         typeof proof !== 'string' || !/^[a-f0-9]{64}$/.test(proof) || hash(proof) !== entry.proofHash) {
       throw fail(403, 'Device verification failed');
     }
@@ -87,7 +97,7 @@ function registerAlertApi(app, { store, cache, snapshot, messaging, verification
       const previousOwners = state.devices.filter(d => d.token === entry.token && d.ownerHash !== req.ownerHash).map(d => d.ownerHash);
       state.devices = state.devices.filter(d => d.ownerHash !== req.ownerHash && d.token !== entry.token);
       state.alerts = state.alerts.filter(a => !previousOwners.includes(a.ownerHash));
-      state.devices.push({ ownerHash: req.ownerHash, token: entry.token, expiresAt: Date.now() + RETENTION_MS });
+      state.devices.push({ ownerHash: req.ownerHash, ...(req.account ? { accountUid: req.account.uid } : {}), token: entry.token, expiresAt: Date.now() + RETENTION_MS });
       state.alerts.filter(a => a.ownerHash === req.ownerHash).forEach(a => { a.deviceToken = entry.token; });
     });
     res.json({ success: true });
@@ -95,8 +105,16 @@ function registerAlertApi(app, { store, cache, snapshot, messaging, verification
 
   app.get('/api/alert-devices', (req, res) => {
     const device = store.state.devices.find(d => d.ownerHash === req.ownerHash && d.expiresAt > Date.now());
-    res.json({ verified: Boolean(device), tokenHash: device ? hash(device.token) : null });
+    res.json({ verified: Boolean(device?.token), tokenHash: device?.token ? hash(device.token) : null });
   });
+  app.post('/api/alert-devices/detach', asyncRoute(async (req, res) => {
+    await store.transaction(state => {
+      state.devices.filter(d => d.ownerHash === req.ownerHash).forEach(d => { d.token = null; });
+      state.alerts.filter(a => a.ownerHash === req.ownerHash).forEach(a => { a.deviceToken = null; });
+    }, { when: state => state.devices.some(d => d.ownerHash === req.ownerHash && d.token) });
+    for (const [id, entry] of pending) if (entry.ownerHash === req.ownerHash) pending.delete(id);
+    res.json({ success: true });
+  }));
   app.delete('/api/alert-devices', asyncRoute(async (req, res) => {
     await store.transaction(state => {
       state.devices = state.devices.filter(d => d.ownerHash !== req.ownerHash);

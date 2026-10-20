@@ -12,7 +12,7 @@ test('keyless development reads only allowlisted public Render data and unwraps 
       return { ok: true, json: async () => ({ data, lastUpdated: '2026-10-18T12:00:00Z' }) };
     }
   });
-  assert.deepEqual(calls, ['https://themeparkinfo-api.onrender.com/api/wdw']);
+  assert.deepEqual(calls, ['https://themeparkinfo-api.onrender.com/park-feed/wdw']);
   assert.deepEqual(result.data, data);
   assert.equal(result.hosted, true);
   assert.equal(result.lastUpdated, '2026-10-18T12:00:00Z');

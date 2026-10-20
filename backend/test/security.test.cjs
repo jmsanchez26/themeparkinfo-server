@@ -23,6 +23,7 @@ async function setup(t, options = {}) {
   const app = express();
   if (options.trustProxy) app.set('trust proxy', 1);
   app.use(express.json({ limit: '12kb' }));
+  if (options.account) app.use((req, res, next) => { req.account = options.account(req); next(); });
   registerAlertApi(app, {
     store, cache: { wdw: { data: { liveData: [{ id: 'ride-1', name: 'Test Ride', entityType: 'ATTRACTION' }] } } },
     snapshot: buildAlertSnapshot, messaging: () => ({ async send(message) { sent.push(message); return options.sender?.send(message); } }),
@@ -63,6 +64,30 @@ test('private alerts reject missing credentials and isolate read/update/delete b
   await send('patch', '/api/alerts/' + id).send({ waitTime: 10 }).expect(200);
   await send('delete', '/api/alerts/' + id).expect(200);
   assert.equal(store.state.alerts.length, 0);
+});
+
+test('legacy device alerts bind to one verified account, logout detaches push without deleting alerts, and verification cannot cross accounts', async t => {
+  let account;
+  const { store, send, register, verify } = await setup(t, { account: () => account });
+  await register(A, tokenA);
+  await send('post', '/api/alerts').send({ park: 'wdw', rideId: 'ride-1', waitTime: 20 }).expect(201);
+  account = { uid: 'account-a' };
+  await send('get', '/api/alerts').expect(200);
+  assert.equal(store.state.devices[0].accountUid, 'account-a');
+  account = { uid: 'account-b' };
+  await send('get', '/api/alerts').expect(403);
+  await send('delete', '/api/alert-devices').expect(403);
+  account = { uid: 'account-a' };
+  await send('post', '/api/alert-devices/detach').expect(200);
+  assert.equal(store.state.alerts.length, 1);
+  assert.equal(store.state.alerts[0].deviceToken, null);
+  assert.equal(store.state.devices[0].token, null);
+  const status = await send('get', '/api/alert-devices').expect(200);
+  assert.equal(status.body.verified, false);
+  assert.equal(status.body.tokenHash, null);
+  const proof = await verify(B, tokenB);
+  account = { uid: 'account-b' };
+  await send('post', '/api/alert-devices/verify', B).send(proof).expect(403);
 });
 
 test('knowing a push token cannot register it: proof is owner-bound, single-use, and required', async t => {

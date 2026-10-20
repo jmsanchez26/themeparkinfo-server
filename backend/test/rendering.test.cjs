@@ -38,7 +38,7 @@ test('all dynamic HTML assignments use the sanitizer; each page loads it before 
   const acorn = require('acorn'), walk = require('acorn-walk');
   for (const base of ['public', 'themeparkinfo-mobile/www']) {
     const dir = path.join(root, base, 'assets/js');
-    for (const file of fs.readdirSync(dir).filter(f => f.endsWith('.js') && !['purify.min.js', 'safeHtml.js', 'alertRules.js'].includes(f))) {
+    for (const file of fs.readdirSync(dir).filter(f => f.endsWith('.js') && !['purify.min.js', 'safeHtml.js', 'alertRules.js', 'auth.bundle.js'].includes(f))) {
       const source = fs.readFileSync(path.join(dir, file), 'utf8');
       walk.simple(acorn.parse(source, { ecmaVersion: 'latest' }), { AssignmentExpression(node) {
         if (node.left.type === 'MemberExpression' && node.left.property.name === 'innerHTML') {
@@ -49,6 +49,13 @@ test('all dynamic HTML assignments use the sanitizer; each page loads it before 
     const pages = [path.join(root, base, 'index.html'), ...fs.readdirSync(path.join(root, base, 'pages')).map(f => path.join(root, base, 'pages', f))];
     for (const file of pages.filter(f => f.endsWith('.html'))) {
       const html = fs.readFileSync(file, 'utf8');
+      if (path.basename(file) === 'login.html') {
+        // This standalone review screen uses textContent, not dynamic HTML.
+        assert.ok(html.includes('Content-Security-Policy'), file);
+        assert.ok(html.includes("form-action 'none'"), file);
+        assert.ok(!/<script(?![^>]*\bsrc=)/i.test(html), file);
+        continue;
+      }
       assert.ok(html.indexOf('purify.min.js') < html.indexOf('safeHtml.js'), file);
       assert.ok(html.indexOf('safeHtml.js') < html.indexOf('apiBase.js'), file);
       assert.ok(html.includes('Content-Security-Policy'), file);

@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "start:api": "node server.js",
+    "start:local": "node local-auth.cjs",
     "test": "node --test test/*.test.cjs"
   },
   "dependencies": {
@@ -19,6 +20,7 @@
   "devDependencies": {
     "acorn": "^8.19.0",
     "acorn-walk": "^8.3.5",
+    "firebase-tools": "^15.34.0",
     "jsdom": "^29.1.1",
     "supertest": "^7.3.1"
   },

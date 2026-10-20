@@ -1,7 +1,7 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="auth-loading">
 <head>
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; script-src-attr 'none'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; img-src 'self' data:; connect-src 'self' https://themeparkinfo-api.onrender.com https://api.themeparks.wiki; frame-src https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; script-src-attr 'none'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; img-src 'self' data:; connect-src 'self' https://themeparkinfo-api.onrender.com https://api.themeparks.wiki https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com http://127.0.0.1:9099; frame-src https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <meta charset="UTF-8" />
   <title>Adventure Scout -  Universal Studios - Orlando</title>
@@ -16,6 +16,9 @@
   <link rel="stylesheet" href="../assets/css/rideDetailsModal.css"> 
   <link rel="stylesheet" href="../assets/css/icons.css"> 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css"/>
+<link rel="stylesheet" href="../assets/css/auth.css">
+<script src="../assets/js/auth.bundle.js" defer></script>
+<script src="../assets/js/app-loader.js" defer></script>
 </head>
 
 <body>
@@ -247,21 +250,22 @@
   <!-- =========================
        SCRIPTS
   ========================== -->
-  <script src="../assets/js/purify.min.js"></script>
-  <script src="../assets/js/safeHtml.js"></script>
-  <script src="../assets/js/alertRules.js"></script>
-  <script src="../assets/js/alertSecurity.js"></script>
+  <script type="application/x-scout-script" data-auth-src="../assets/js/purify.min.js"></script>
+  <script type="application/x-scout-script" data-auth-src="../assets/js/safeHtml.js"></script>
+  <script type="application/x-scout-script" data-auth-src="../assets/js/alertRules.js"></script>
+  <script type="application/x-scout-script" data-auth-src="../assets/js/browserAlerts.js"></script>
+  <script type="application/x-scout-script" data-auth-src="../assets/js/alertSecurity.js"></script>
 
-<script src="../assets/js/apiBase.js"></script>
-<script src="../assets/js/usOrlando-initial-setup.js"></script> 
-<script src="../assets/js/rideMetadata.js"></script>
-<script src="../assets/js/waittimes.js?v=2"></script>
-<script src="../assets/js/parkHours.js"></script>
-<script src="../assets/js/parkTabs.js"></script>
-<script src="../assets/js/filterTables.js"></script>
-<script src="../assets/js/navigation.js"></script>
-<script src="../assets/js/cardsortsearch.js"></script>
-<script src="../assets/js/alertbtn.js"></script>
+<script type="application/x-scout-script" data-auth-src="../assets/js/apiBase.js"></script>
+<script type="application/x-scout-script" data-auth-src="../assets/js/usOrlando-initial-setup.js"></script>
+<script type="application/x-scout-script" data-auth-src="../assets/js/rideMetadata.js"></script>
+<script type="application/x-scout-script" data-auth-src="../assets/js/waittimes.js?v=2"></script>
+<script type="application/x-scout-script" data-auth-src="../assets/js/parkHours.js"></script>
+<script type="application/x-scout-script" data-auth-src="../assets/js/parkTabs.js"></script>
+<script type="application/x-scout-script" data-auth-src="../assets/js/filterTables.js"></script>
+<script type="application/x-scout-script" data-auth-src="../assets/js/navigation.js"></script>
+<script type="application/x-scout-script" data-auth-src="../assets/js/cardsortsearch.js"></script>
+<script type="application/x-scout-script" data-auth-src="../assets/js/alertbtn.js"></script>
 </body>
 </html>
 

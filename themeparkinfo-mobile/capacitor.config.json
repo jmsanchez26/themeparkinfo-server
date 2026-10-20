@@ -1,5 +1,7 @@
 {
   "appId": "com.juanm.themeparkinfo",
   "appName": "ThemeParkInfo",
-  "webDir": "www"
+  "webDir": "www",
+  "loggingBehavior": "none",
+  "plugins": { "FirebaseAuthentication": { "providers": ["google.com"], "skipNativeAuth": false } }
 }

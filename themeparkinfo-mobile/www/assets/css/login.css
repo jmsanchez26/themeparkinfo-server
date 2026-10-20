@@ -1,0 +1,57 @@
+:root {
+  color-scheme: light;
+  --login-bg: #f5f8fa;
+  --login-surface: #fff;
+  --login-text: #142f3d;
+  --login-muted: #536873;
+  --login-border: #dce5ea;
+  --login-accent: #007c78;
+  --login-soft: #e2f3ee;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #eaf0f3; color: var(--login-text); font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; padding: 36px 16px; }
+button, input { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button { cursor: pointer; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid var(--login-accent); outline-offset: 4px; }
+[hidden] { display: none !important; }
+.login-shell { width: 100%; max-width: 420px; margin: auto; background: var(--login-bg); border: 1px solid var(--login-border); border-radius: 28px; overflow: hidden; box-shadow: 0 20px 60px #142f3d12; }
+.login-brand { display: flex; align-items: center; gap: 10px; padding: 26px 28px; color: var(--login-accent); font-size: 17px; font-weight: 650; }
+.brand-compass { font-size: 30px; line-height: 1; }
+.login-hero { padding: 8px 28px 28px; }
+.park-mark { position: relative; width: 66px; height: 66px; background: var(--login-soft); border-radius: 20px; margin-bottom: 24px; color: var(--login-accent); }
+.wheel { position: absolute; width: 33px; height: 33px; left: 16px; top: 11px; border: 2px solid currentColor; border-radius: 50%; background: linear-gradient(90deg, transparent 47%, currentColor 47%, currentColor 53%, transparent 53%), linear-gradient(0deg, transparent 47%, currentColor 47%, currentColor 53%, transparent 53%); }
+.wheel::before { content: ''; position: absolute; inset: -2px; border: 2px dashed currentColor; border-radius: 50%; transform: rotate(45deg); }
+.wheel-support { position: absolute; left: 22px; top: 35px; width: 22px; height: 19px; border-left: 2px solid currentColor; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; clip-path: polygon(40% 0, 60% 0, 100% 100%, 0 100%); background: currentColor; }
+.eyebrow { font-size: 11px; letter-spacing: 1.5px; font-weight: 650; text-transform: uppercase; color: var(--login-accent); margin: 0; }
+h1 { font-size: clamp(28px, 7vw, 33px); line-height: 1.15; letter-spacing: -1.1px; font-weight: 650; margin: 13px 0; }
+.hero-description { color: var(--login-muted); font-size: 15px; line-height: 1.6; margin: 0; }
+.login-panel { background: var(--login-surface); border-radius: 26px 26px 0 0; padding: 28px; }
+h2 { font-size: 23px; letter-spacing: -.5px; margin: 0 0 6px; font-weight: 650; }
+.login-subtitle { color: var(--login-muted); font-size: 14px; line-height: 1.5; margin: 0 0 24px; }
+.login-button { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 50px; padding: 13px 14px; border-radius: 12px; font-size: 15px; font-weight: 600; }
+.google-button { background: var(--login-surface); border: 1px solid var(--login-border); color: var(--login-text); }
+.google-letter { font-size: 21px; font-weight: 700; }
+.primary-button { background: var(--login-accent); color: #fff; border: 1px solid var(--login-accent); }
+.primary-button:hover { background: #006662; }
+.google-button:hover { background: var(--login-bg); }
+.login-divider { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--login-muted); margin: 20px 0; }
+.login-divider span:first-child, .login-divider span:last-child { flex: 1; height: 1px; background: var(--login-border); }
+label { display: block; font-size: 14px; font-weight: 500; margin: 0 0 7px; }
+input { width: 100%; min-height: 49px; padding: 12px; border-radius: 10px; border: 1px solid var(--login-border); background: var(--login-bg); color: var(--login-text); font-size: 16px; margin-bottom: 17px; }
+input::placeholder { color: var(--login-muted); opacity: 1; }
+.password-field { position: relative; }
+.password-field input { padding-right: 66px; margin-bottom: 8px; }
+#show-password { position: absolute; right: 6px; top: 3px; min-height: 43px; padding: 8px; color: var(--login-accent); background: transparent; border: 0; font-size: 13px; }
+.text-button { color: var(--login-accent); padding: 8px 0; background: transparent; border: 0; font-size: 13px; min-height: 40px; }
+.forgot-button { display: block; margin: 0 0 13px auto; }
+.account-switch { font-size: 13px; text-align: center; color: var(--login-muted); margin: 10px 0 0; }
+.account-switch button { font-weight: 600; }
+.back-button { display: block; margin: 0 auto; }
+.login-message { color: var(--login-accent); background: var(--login-soft); padding: 13px; border-radius: 10px; font-size: 14px; line-height: 1.5; margin: 20px 0 0; }
+.preview-note { font-size: 12px; color: var(--login-muted); text-align: center; line-height: 1.6; margin: 24px 0 10px; }
+.return-link { display: block; color: var(--login-accent); font-size: 13px; text-align: center; padding: 10px 0; text-underline-offset: 3px; }
+button:disabled { opacity: .65; cursor: wait; }
+#test-signin, #verification-actions { margin-top: 18px; }
+footer { padding: 0 20px 24px; text-align: center; font-size: 12px; color: var(--login-muted); background: var(--login-surface); }
+@media (max-width: 480px) { body { background: var(--login-bg); padding: 0; } .login-shell { border: 0; border-radius: 0; box-shadow: none; max-width: none; } .login-brand { padding-top: max(24px, env(safe-area-inset-top)); } footer { padding-bottom: max(24px, env(safe-area-inset-bottom)); } }
