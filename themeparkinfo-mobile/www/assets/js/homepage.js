@@ -456,6 +456,7 @@
         return liveData
           .filter(item => item.entityType === "ATTRACTION")
           .map(item => ({
+            name: item.name,
             favoriteKeyCandidates: [
               `mg::${item.id || item.name}`,
               `epcot::${item.id || item.name}`,
@@ -469,7 +470,6 @@
               `volcanoBay::${item.id || item.name}`,
               `usHollywood::${item.id || item.name}`
             ],
-            name: item.name,
             currentWait: item.queue?.STANDBY?.waitTime,
             status: item.status || "Unknown",
             park: formatParkLabel(item.parkId, endpoint.label),
@@ -632,10 +632,9 @@
             throw new Error(`Could not load ${endpoint.label}`);
           }
 
-          return {
-            endpoint,
-            payload: await response.json()
-          };
+          const payload = await response.json();
+          window.ParkDataCache?.write(endpoint.url, payload);
+          return { endpoint, payload };
         })
       );
 

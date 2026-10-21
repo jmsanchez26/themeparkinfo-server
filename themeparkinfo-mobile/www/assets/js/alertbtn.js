@@ -78,7 +78,7 @@ async function attachPushListeners() {
       const permission = await localNotifications.requestPermissions();
       if (permission.display !== "granted") return;
 
-      const title = notification.title || "ThemeParkInfo alert";
+      const title = notification.title || "Adventure Scout alert";
       const body = notification.body || "A wait time alert was triggered.";
 
       await localNotifications.schedule({

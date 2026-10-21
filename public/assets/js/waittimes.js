@@ -318,10 +318,38 @@ async function getParkData() {
     }
 
     if (!response.data || !response.data.liveData) {
-      console.warn("No live data available");
-      return;
+      throw new Error('No live data available');
     }
 
+    window.ParkDataCache?.write(apiUrl, response);
+    applyParkData(response);
+    setParkDataStatus('Wait times updated · ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+    checkAlerts(alertVar);
+    // Saved-alert badges must not hold up the ride list.
+    refreshRideAlertState().then(() => renderAll()).catch(() => {});
+  } catch (err) {
+    console.error("API Error:", err);
+    setParkDataStatus('Could not refresh wait times. Any saved information shown may have changed.');
+    queueParkDataRetry();
+  } finally {
+    parkDataRequestInFlight = false;
+  }
+}
+
+function setParkDataStatus(message) {
+  let status = document.getElementById('park-data-status');
+  if (!status) {
+    status = document.createElement('p');
+    status.id = 'park-data-status';
+    status.className = 'park-data-status';
+    status.setAttribute('role', 'status');
+    const header = document.getElementById('header-placeholder');
+    if (header) header.after(status);
+    else (document.querySelector('main') || document.body).prepend(status);
+  }
+  status.textContent = message;
+}
+function applyParkData(response) {
     const data = response.data;
 
     resetData();
@@ -425,15 +453,9 @@ async function getParkData() {
 
       });
 
-      await refreshRideAlertState();
       renderAll();
-      checkAlerts(alertVar);
-  } catch (err) {
-    console.error("API Error:", err);
-    queueParkDataRetry();
-  } finally {
-    parkDataRequestInFlight = false;
-  }
+
+
 }
 
 function resetData() {
@@ -655,6 +677,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   logSavedAlerts("page load");
 
+  const saved = window.ParkDataCache?.read(apiUrl);
+  if (saved) {
+    try {
+      applyParkData(saved.payload);
+      setParkDataStatus('Saved wait times from ' + new Date(saved.savedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' · Refreshing…');
+    } catch { /* A bad snapshot must not prevent fetching the live list. */ }
+  }
   getParkData();
   setInterval(getParkData, 30000);
   window.addEventListener('storage', event => {

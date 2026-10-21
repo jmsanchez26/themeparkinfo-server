@@ -651,3 +651,5 @@ a {
     font-size: 0.7rem;
   }
 }
+
+.park-data-status { margin: 12px 16px; color: #526176; font-size: .85rem; line-height: 1.5; }

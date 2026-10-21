@@ -632,10 +632,9 @@
             throw new Error(`Could not load ${endpoint.label}`);
           }
 
-          return {
-            endpoint,
-            payload: await response.json()
-          };
+          const payload = await response.json();
+          window.ParkDataCache?.write(endpoint.url, payload);
+          return { endpoint, payload };
         })
       );
 

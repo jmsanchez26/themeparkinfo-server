@@ -11,6 +11,15 @@ import { getAuth, connectAuthEmulator, onAuthStateChanged, GoogleAuthProvider, s
   const base = window.Capacitor?.isNativePlatform?.() ? 'https://themeparkinfo-api.onrender.com' : '';
   const loginPage = location.pathname === '/pages/login.html';
   let auth, config, currentUser, signingOut = false;
+  const navigationCheckKey = 'scout-navigation-check';
+  function recentAndroidCheck() {
+    if (!android || !currentUser?.uid || !currentUser.emailVerified) return false;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(navigationCheckKey) || 'null');
+      const age = Date.now() - saved?.checkedAt;
+      return saved?.uid === currentUser.uid && age >= 0 && age < 5 * 60 * 1000;
+    } catch { return false; }
+  }
   let resolveReady, rejectReady;
   const ready = new Promise((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
   ready.catch(() => {});
@@ -38,6 +47,7 @@ import { getAuth, connectAuthEmulator, onAuthStateChanged, GoogleAuthProvider, s
     profileKeys.forEach(key => localStorage.removeItem(key));
     localStorage.removeItem('scout-active-user');
     localStorage.removeItem('pushDeviceToken');
+    sessionStorage.removeItem(navigationCheckKey);
   }
   async function token(force = false) {
     if (android) {
@@ -47,15 +57,19 @@ import { getAuth, connectAuthEmulator, onAuthStateChanged, GoogleAuthProvider, s
     if (!auth?.currentUser) throw new Error('Please sign in to continue.');
     return auth.currentUser.getIdToken(force);
   }
-  async function validate() {
-    const response = await nativeFetch(base + '/api/auth/me', { headers: { 'X-Firebase-ID-Token': await token(true) }, cache: 'no-store' });
+  async function validate(forceRefresh = false) {
+    const response = await nativeFetch(base + '/api/auth/me', { headers: { 'X-Firebase-ID-Token': await token(forceRefresh) }, cache: 'no-store' });
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || 'Could not verify sign-in.');
     activateProfile(result.uid);
+    if (android) {
+      try { sessionStorage.setItem(navigationCheckKey, JSON.stringify({ uid: result.uid, checkedAt: Date.now() })); } catch {}
+    }
     document.documentElement.classList.remove('auth-loading');
     return result;
   }
   function redirectLogin() {
+    sessionStorage.removeItem(navigationCheckKey);
     if (!loginPage && !signingOut) location.replace('/pages/login.html');
   }
   const app = window.AppAuth = {
@@ -90,7 +104,7 @@ import { getAuth, connectAuthEmulator, onAuthStateChanged, GoogleAuthProvider, s
       await ready;
       if (android) { await native.reload(); currentUser = (await native.getCurrentUser()).user; }
       else if (auth.currentUser) { await reload(auth.currentUser); currentUser = auth.currentUser; }
-      await validate(); location.replace('/index.html');
+      await validate(true); location.replace('/index.html');
     },
     async testUser() {
       await ready;
@@ -129,13 +143,15 @@ import { getAuth, connectAuthEmulator, onAuthStateChanged, GoogleAuthProvider, s
   window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
   window.addEventListener('storage', event => { if (event.key === 'scout-active-user') location.reload(); });
   (async () => {
-    const response = await nativeFetch(base + '/api/auth/config', { cache: 'no-store' });
-    if (!response.ok) throw new Error('Sign-in configuration is unavailable. Please try again.');
-    config = await response.json();
     if (android) {
+      // Native Firebase already has its configuration in google-services.json.
+      config = { emulator: false };
       if (!native) throw new Error('Update the Android app to use sign-in.');
       currentUser = (await native.getCurrentUser()).user;
     } else {
+      const response = await nativeFetch(base + '/api/auth/config', { cache: 'no-store' });
+      if (!response.ok) throw new Error('Sign-in configuration is unavailable. Please try again.');
+      config = await response.json();
       auth = getAuth(initializeApp(config.firebase));
       if (config.emulator) {
         if (!['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) || config.emulatorUrl !== 'http://127.0.0.1:9099') throw new Error('Invalid local authentication configuration.');
@@ -147,7 +163,10 @@ import { getAuth, connectAuthEmulator, onAuthStateChanged, GoogleAuthProvider, s
     }
     if (!loginPage) {
       if (!currentUser) { redirectLogin(); throw new Error('Please sign in to continue.'); }
-      await validate();
+      if (recentAndroidCheck()) {
+        activateProfile(currentUser.uid);
+        document.documentElement.classList.remove('auth-loading');
+      } else await validate();
     }
     resolveReady();
   })().catch(error => {

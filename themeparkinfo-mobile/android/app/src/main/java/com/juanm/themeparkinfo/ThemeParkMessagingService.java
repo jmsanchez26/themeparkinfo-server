@@ -34,7 +34,7 @@ public class ThemeParkMessagingService extends FirebaseMessagingService {
         }
 
         if (title == null || title.isEmpty()) {
-            title = "ThemeParkInfo alert";
+            title = "Adventure Scout alert";
         }
 
         if (body == null || body.isEmpty()) {

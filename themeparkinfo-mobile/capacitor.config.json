@@ -1,6 +1,6 @@
 {
   "appId": "com.juanm.themeparkinfo",
-  "appName": "ThemeParkInfo",
+  "appName": "Adventure Scout",
   "webDir": "www",
   "loggingBehavior": "none",
   "plugins": { "FirebaseAuthentication": { "providers": ["google.com"], "skipNativeAuth": false } }

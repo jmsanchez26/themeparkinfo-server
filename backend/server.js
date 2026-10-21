@@ -318,7 +318,7 @@ function buildAggregatedMessage(alerts) {
   }
 
   return {
-    title: "ThemeParkInfo alerts",
+    title: "Adventure Scout alerts",
     body: `${alerts.length} rides hit your alert settings. Open the app for details.`
   };
 }
